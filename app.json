@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "CV Optimizer AI",
+    "slug": "cv-optimizer-ai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "cvoptimize",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.local.cvoptimizerai"
+    },
+    "android": {
+      "package": "com.local.cvoptimizerai"
+    },
+    "plugins": [
+      "expo-document-picker"
+    ]
+  }
+}

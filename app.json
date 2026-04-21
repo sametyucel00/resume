@@ -33,6 +33,12 @@
     },
     "plugins": [
       "expo-document-picker"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "50b50267-e974-4c60-9645-0b05caa9a501"
+      }
+    },
+    "owner": "simic52"
   }
 }

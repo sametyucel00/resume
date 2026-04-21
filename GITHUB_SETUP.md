@@ -41,6 +41,16 @@ It is intentionally designed so native builds happen in GitHub Actions, not loca
 
 The workflow uses the EAS production profile from `eas.json`.
 
+Before the first non-interactive EAS build, the project must be linked to Expo once.
+
+One-time local step:
+
+```bash
+npx eas-cli@latest init
+```
+
+That step writes the EAS project link into app config. After it is committed, GitHub Actions can run non-interactive builds.
+
 Workflow inputs:
 
 - `platform`: `android`, `ios`, or `all`
@@ -67,6 +77,7 @@ Current workflow notes:
 - package id is `com.hirvia.ai`
 - current workflow expects EAS / Expo credentials management through `EXPO_TOKEN`
 - Android signing secrets above are the manual equivalents to keep documented and ready
+- first non-interactive EAS build will fail until `eas init` has been completed once for this app
 
 ## Recommended Variables
 

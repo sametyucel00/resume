@@ -32,6 +32,7 @@ jobs:
     if: ${{ github.event.inputs.platform == 'android' || github.event.inputs.platform == 'all' }}
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EAS_BUILD_NO_EXPO_GO_WARNING: "true"
 
     steps:
       - name: Checkout
@@ -69,6 +70,7 @@ jobs:
     if: ${{ github.event.inputs.platform == 'ios' || github.event.inputs.platform == 'all' }}
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EAS_BUILD_NO_EXPO_GO_WARNING: "true"
 
     steps:
       - name: Checkout

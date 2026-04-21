@@ -1,24 +1,35 @@
 {
   "expo": {
-    "name": "CV Optimizer AI",
-    "slug": "cv-optimizer-ai",
+    "name": "Hirvia",
+    "slug": "hirvia",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "scheme": "cvoptimize",
+    "scheme": "hirvia",
+    "icon": "./assets/branding/hirvia-icon-final.png",
     "assetBundlePatterns": [
       "**/*"
     ],
     "web": {
       "bundler": "metro",
-      "output": "single"
+      "output": "single",
+      "favicon": "./assets/branding/hirvia-icon-final.png"
+    },
+    "splash": {
+      "image": "./assets/branding/hirvia-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F8FAFC"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.local.cvoptimizerai"
+      "bundleIdentifier": "com.hirvia.ai"
     },
     "android": {
-      "package": "com.local.cvoptimizerai"
+      "package": "com.hirvia.ai",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/branding/hirvia-icon-final.png",
+        "backgroundColor": "#0B1220"
+      }
     },
     "plugins": [
       "expo-document-picker"

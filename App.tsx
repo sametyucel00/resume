@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button, EmptyState, Field, Screen, Section, Segmented, Skeleton, Title, colors } from "./src/components/ui";
 import * as Clipboard from "expo-clipboard";
@@ -16,6 +16,9 @@ import { parseLooseJson } from "./src/utils/json";
 import { splitCsv, splitLines, shortId } from "./src/utils/text";
 
 type Step = "profile" | "cv" | "bullets" | "job" | "optimize" | "ats" | "export" | "interview" | "history" | "settings";
+
+const hirviaLogo = require("./assets/branding/hirvia-logo.png");
+const hirviaIcon = require("./assets/branding/hirvia-icon-final.png");
 
 const steps: { id: Step; label: string; marker: string }[] = [
   { id: "profile", label: "Me", marker: "P" },
@@ -74,6 +77,10 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, AppError
         <Screen>
           <Section>
             <Title title="App error" subtitle="A runtime issue blocked the screen. Local data is still on this device." />
+            <View style={styles.brandCard}>
+              <Image source={hirviaIcon} style={styles.brandIcon} resizeMode="contain" />
+              <Image source={hirviaLogo} style={styles.brandLogo} resizeMode="contain" />
+            </View>
             <View style={styles.runtimeErrorBox}>
               <Text style={styles.runtimeErrorTitle}>Runtime message</Text>
               <Text style={styles.runtimeErrorText}>{this.state.message}</Text>
@@ -103,7 +110,8 @@ function AppShell() {
       <SafeAreaView style={styles.safe}>
         <Screen>
           <Section>
-            <Title title="CV Optimizer AI" subtitle="Loading your local workspace." />
+            <Image source={hirviaLogo} style={styles.loadingLogo} resizeMode="contain" />
+            <Title title="Hirvia" subtitle="Loading your local workspace." />
             <Skeleton lines={5} />
           </Section>
         </Screen>
@@ -141,8 +149,13 @@ function Header({ step }: { step: Step }) {
   return (
     <View style={[styles.header, styles.headerCompact]}>
       <View style={styles.headerTextWrap}>
-        <Text style={styles.brand}>CV Optimizer AI</Text>
-        <Text style={styles.headerStep}>{currentStep?.label}</Text>
+        <View style={styles.headerBrandRow}>
+          <Image source={hirviaIcon} style={styles.headerIcon} resizeMode="contain" />
+          <View style={styles.headerBrandTextWrap}>
+            <Image source={hirviaLogo} style={styles.headerLogo} resizeMode="contain" />
+            <Text style={styles.headerStep}>{currentStep?.label}</Text>
+          </View>
+        </View>
       </View>
       <View style={[styles.creditPill, credits <= 0 && styles.creditPillEmpty]}>
         <Text style={[styles.creditText, credits <= 0 && styles.creditTextEmpty]}>{credits} credits</Text>
@@ -1334,15 +1347,58 @@ const styles = StyleSheet.create({
   headerTextWrap: {
     gap: 2
   },
+  headerBrandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10
+  },
+  headerBrandTextWrap: {
+    gap: 2
+  },
   brand: {
     color: colors.ink,
     fontSize: 16,
     fontWeight: "800"
   },
+  headerIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 8
+  },
+  headerLogo: {
+    width: 108,
+    height: 28
+  },
   headerStep: {
     color: colors.muted,
     fontSize: 12,
     fontWeight: "700"
+  },
+  loadingLogo: {
+    width: 136,
+    height: 40,
+    marginBottom: 8
+  },
+  brandCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 8,
+    backgroundColor: colors.white
+  },
+  brandIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10
+  },
+  brandLogo: {
+    width: 116,
+    height: 32
   },
   creditPill: {
     borderWidth: 1,

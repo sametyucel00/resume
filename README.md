@@ -1,6 +1,6 @@
-# CV Optimizer AI
+# Hirvia
 
-A production-oriented Expo + React Native Web application for fast CV optimization and job application assistance.
+Hirvia is a production-oriented Expo + React Native Web application for AI-powered CV optimization, job application improvement, and interview preparation.
 
 ## What it is
 

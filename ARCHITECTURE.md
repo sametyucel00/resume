@@ -1,8 +1,8 @@
-# CV Optimizer AI Architecture
+# Hirvia Architecture
 
 ## Goal
 
-CV Optimizer AI is a local-first job application optimization tool built with one Expo codebase for mobile and web, plus a minimal Node.js API for AI provider access, rate limiting, and logging.
+Hirvia is a local-first job application optimization tool built with one Expo codebase for mobile and web, plus a minimal Node.js API for AI provider access, rate limiting, and logging.
 
 The product flow is:
 

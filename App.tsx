@@ -220,6 +220,13 @@ function ProfileScreen({ next }: { next: () => void }) {
 
   return (
     <Section>
+      <View style={styles.heroPanel}>
+        <View style={styles.heroBrandRow}>
+          <Image source={hirviaIcon} style={styles.heroIcon} resizeMode="contain" />
+          <Image source={hirviaLogo} style={styles.heroLogo} resizeMode="contain" />
+        </View>
+        <Text style={styles.heroLine}>The smart path to getting hired.</Text>
+      </View>
       <Title title="Profile" subtitle="Set the essentials once." />
       <Field label="Name" value={profile.fullName} onChangeText={(fullName) => updateProfile({ fullName })} placeholder="Ayse Yilmaz" />
       <Field label="Target title" value={profile.title} onChangeText={(title) => updateProfile({ title })} placeholder="Product Manager" />
@@ -1399,6 +1406,35 @@ const styles = StyleSheet.create({
   brandLogo: {
     width: 116,
     height: 32
+  },
+  heroPanel: {
+    borderWidth: 1,
+    borderColor: "#DCE3F1",
+    backgroundColor: colors.white,
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 10
+  },
+  heroBrandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 10
+  },
+  heroIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 12
+  },
+  heroLogo: {
+    width: 122,
+    height: 32
+  },
+  heroLine: {
+    color: colors.ink,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "700"
   },
   creditPill: {
     borderWidth: 1,

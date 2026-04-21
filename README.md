@@ -87,3 +87,4 @@ The credit system is implemented locally. Native purchases use direct Apple IAP 
 - [QA Checklist](./QA_CHECKLIST.md)
 - [Release Checklist](./RELEASE_CHECKLIST.md)
 - [GitHub Setup](./GITHUB_SETUP.md)
+- [Store Listing](./STORE_LISTING.md)

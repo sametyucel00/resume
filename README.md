@@ -83,6 +83,7 @@ The credit system is implemented locally. Native purchases use direct Apple IAP 
 
 ## More docs
 
-- [Architecture](C:/Users/Samet/Downloads/cv/ARCHITECTURE.md)
-- [QA Checklist](C:/Users/Samet/Downloads/cv/QA_CHECKLIST.md)
-- [Release Checklist](C:/Users/Samet/Downloads/cv/RELEASE_CHECKLIST.md)
+- [Architecture](./ARCHITECTURE.md)
+- [QA Checklist](./QA_CHECKLIST.md)
+- [Release Checklist](./RELEASE_CHECKLIST.md)
+- [GitHub Setup](./GITHUB_SETUP.md)

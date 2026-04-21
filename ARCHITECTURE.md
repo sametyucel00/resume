@@ -17,18 +17,18 @@ The product flow is:
 
 ### UI structure
 
-The primary app shell lives in [App.tsx](C:/Users/Samet/Downloads/cv/App.tsx).
+The primary app shell lives in [App.tsx](./App.tsx).
 
 It adapts to viewport size:
 
 - Web and mobile: bottom step navigation
 - Single-purpose screens with 2-3 primary actions
 
-Reusable UI primitives live in [src/components/ui.tsx](C:/Users/Samet/Downloads/cv/src/components/ui.tsx).
+Reusable UI primitives live in [src/components/ui.tsx](./src/components/ui.tsx).
 
 ## State Model
 
-The persisted local model is defined in [src/types.ts](C:/Users/Samet/Downloads/cv/src/types.ts) and managed by [src/store/useAppStore.ts](C:/Users/Samet/Downloads/cv/src/store/useAppStore.ts).
+The persisted local model is defined in [src/types.ts](./src/types.ts) and managed by [src/store/useAppStore.ts](./src/store/useAppStore.ts).
 
 ```json
 {
@@ -48,9 +48,9 @@ Additional persisted fields support:
 
 ## AI Layer
 
-The client AI entry point is [src/services/ai.ts](C:/Users/Samet/Downloads/cv/src/services/ai.ts).
+The client AI entry point is [src/services/ai.ts](./src/services/ai.ts).
 
-Core contract rules live in [src/services/aiContracts.ts](C:/Users/Samet/Downloads/cv/src/services/aiContracts.ts):
+Core contract rules live in [src/services/aiContracts.ts](./src/services/aiContracts.ts):
 
 - stable prompt version
 - task-specific validation
@@ -60,9 +60,9 @@ Core contract rules live in [src/services/aiContracts.ts](C:/Users/Samet/Downloa
 
 The API layer is intentionally small:
 
-- [server/index.js](C:/Users/Samet/Downloads/cv/server/index.js)
-- [server/aiProviders.js](C:/Users/Samet/Downloads/cv/server/aiProviders.js)
-- [server/prompts.js](C:/Users/Samet/Downloads/cv/server/prompts.js)
+- [server/index.js](./server/index.js)
+- [server/aiProviders.js](./server/aiProviders.js)
+- [server/prompts.js](./server/prompts.js)
 
 Supported providers:
 
@@ -83,7 +83,7 @@ The backend import endpoint accepts PDF, DOCX, and TXT and normalizes the result
 
 ### Export
 
-Export helpers live in [src/services/exporter.ts](C:/Users/Samet/Downloads/cv/src/services/exporter.ts) and [src/services/templates.ts](C:/Users/Samet/Downloads/cv/src/services/templates.ts).
+Export helpers live in [src/services/exporter.ts](./src/services/exporter.ts) and [src/services/templates.ts](./src/services/templates.ts).
 
 Supported export formats:
 
@@ -102,7 +102,7 @@ CV rendering supports:
 
 ## Payments
 
-Purchase logic lives in [src/services/purchases.ts](C:/Users/Samet/Downloads/cv/src/services/purchases.ts).
+Purchase logic lives in [src/services/purchases.ts](./src/services/purchases.ts).
 
 - Native targets use direct store billing through `react-native-iap`
 - Web and Expo preview use safe local fallbacks so development mode works without native builds

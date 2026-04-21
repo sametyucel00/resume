@@ -12,6 +12,18 @@ on:
           - android
           - ios
           - all
+      profile:
+        description: EAS build profile
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+          - preview
+
+concurrency:
+  group: native-build-${{ github.event.inputs.platform }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -47,18 +59,9 @@ jobs:
             exit 1
           fi
 
-      - name: Verify Android signing secrets
-        run: |
-          echo "Android package: com.hirvia.ai"
-          echo "If you manage Android credentials yourself, keep these secrets ready:"
-          echo "ANDROID_KEYSTORE_BASE64"
-          echo "ANDROID_KEY_ALIAS"
-          echo "ANDROID_KEYSTORE_PASSWORD"
-          echo "ANDROID_KEY_PASSWORD"
-
       - name: Build Android
         if: ${{ github.event.inputs.platform == 'android' || github.event.inputs.platform == 'all' }}
-        run: eas build --platform android --profile production --non-interactive
+        run: eas build --platform android --profile ${{ github.event.inputs.profile }} --non-interactive
 
   build-ios:
     runs-on: macos-latest
@@ -94,4 +97,4 @@ jobs:
           fi
 
       - name: Build iOS
-        run: eas build --platform ios --profile production --non-interactive
+        run: eas build --platform ios --profile ${{ github.event.inputs.profile }} --non-interactive

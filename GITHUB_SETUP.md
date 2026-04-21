@@ -41,6 +41,11 @@ It is intentionally designed so native builds happen in GitHub Actions, not loca
 
 The workflow uses the EAS production profile from `eas.json`.
 
+Workflow inputs:
+
+- `platform`: `android`, `ios`, or `all`
+- `profile`: `production` or `preview`
+
 ## Required Secrets
 
 Add these repository secrets before using native CI builds:
@@ -60,7 +65,8 @@ Current workflow notes:
 
 - Android builds are triggered in GitHub Actions
 - package id is `com.hirvia.ai`
-- EAS can manage credentials for you, but the Android signing secrets above are the expected manual equivalents
+- current workflow expects EAS / Expo credentials management through `EXPO_TOKEN`
+- Android signing secrets above are the manual equivalents to keep documented and ready
 
 ## Recommended Variables
 

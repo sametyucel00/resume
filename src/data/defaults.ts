@@ -1,4 +1,5 @@
 import { Cv, LocalData, Profile, Settings } from "../types";
+import { embeddedApiBaseUrl } from "../config/runtime";
 
 export const LOCAL_DATA_VERSION = 1;
 
@@ -28,7 +29,7 @@ export const starterCv: Cv = {
 };
 
 export const defaultSettings: Settings = {
-  apiBaseUrl: "http://localhost:8787",
+  apiBaseUrl: embeddedApiBaseUrl || "http://localhost:8787",
   aiProvider: "groq",
   tone: "direct",
   credits: 12,

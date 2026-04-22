@@ -1,6 +1,7 @@
 import { AiProvider, AiTask } from "../types";
 import { preserveUtf8 } from "../utils/text";
 import { CLIENT_PROMPT_VERSION, fallbackResult, normalizeAIOutput, NormalizedAI } from "./aiContracts";
+import { normalizeNetworkError } from "../utils/userMessages";
 
 type AiRequest = {
   task: AiTask;
@@ -35,7 +36,10 @@ export async function generateAIResult({ task, input, provider = "groq", apiBase
       signal: controller.signal
     });
 
-    if (!response.ok) throw new Error(`AI request failed: ${response.status}`);
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      throw new Error(payload?.error || `AI request failed: ${response.status}`);
+    }
     const data = (await response.json()) as { output?: string; provider?: AiProvider; model?: string; promptVersion?: string };
     const raw = preserveUtf8((data.output ?? "").trim());
     const normalized = normalizeAIOutput(task, raw);
@@ -48,9 +52,15 @@ export async function generateAIResult({ task, input, provider = "groq", apiBase
     };
     cacheSet(cacheKey, result);
     return result;
-  } catch {
+  } catch (error) {
     const fallback = fallbackResult(task);
-    const result: AiResult = { ...fallback, provider, promptVersion: CLIENT_PROMPT_VERSION, cacheKey };
+    const result: AiResult = {
+      ...fallback,
+      message: normalizeNetworkError(error, fallback.message),
+      provider,
+      promptVersion: CLIENT_PROMPT_VERSION,
+      cacheKey
+    };
     cacheSet(cacheKey, result);
     return result;
   } finally {

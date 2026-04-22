@@ -83,6 +83,7 @@ Current workflow notes:
 
 These are usually configured in Expo/EAS or your deployment platform rather than committed:
 
+- `EXPO_PUBLIC_API_BASE_URL` (current production URL: `https://mediumturquoise-otter-922125.hostingersite.com`)
 - `GROQ_API_KEY`
 - `GROQ_MODEL`
 - `OPENAI_API_KEY`

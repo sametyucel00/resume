@@ -14,6 +14,7 @@ import { selectActiveCv, useAppStore } from "./src/store/useAppStore";
 import { AiTask, AtsReport, Cv, CvMode, CvSectionId, InterviewCategory, InterviewPack, JobAnalysis, OptimizedCvDraft, Profile, TemplateId } from "./src/types";
 import { parseLooseJson } from "./src/utils/json";
 import { splitCsv, splitLines, shortId } from "./src/utils/text";
+import { isDeveloperBuild, resolveApiBaseUrl } from "./src/config/runtime";
 
 type Step = "profile" | "cv" | "bullets" | "job" | "optimize" | "ats" | "export" | "interview" | "history" | "settings";
 
@@ -190,9 +191,15 @@ function useActiveCv() {
   return useAppStore(selectActiveCv);
 }
 
+function useResolvedApiBaseUrl() {
+  const settingsApiBaseUrl = useAppStore((state) => state.settings.apiBaseUrl);
+  return useMemo(() => resolveApiBaseUrl(settingsApiBaseUrl), [settingsApiBaseUrl]);
+}
+
 function ProfileScreen({ next }: { next: () => void }) {
   const profile = useAppStore((state) => state.profile);
   const settings = useAppStore((state) => state.settings);
+  const apiBaseUrl = useResolvedApiBaseUrl();
   const updateProfile = useAppStore((state) => state.updateProfile);
   const spendCredit = useAppStore((state) => state.spendCredit);
   const addHistory = useAppStore((state) => state.addHistory);
@@ -207,7 +214,7 @@ function ProfileScreen({ next }: { next: () => void }) {
     setLoading(true);
     const result = await generateAIResult({
       task: "profileSummary",
-      apiBaseUrl: settings.apiBaseUrl,
+      apiBaseUrl,
       provider: settings.aiProvider,
       input: { profile, tone: settings.tone }
     });
@@ -253,6 +260,7 @@ function CvScreen({ next }: { next: () => void }) {
   const cv = useActiveCv();
   const cvs = useAppStore((state) => state.cvs);
   const settings = useAppStore((state) => state.settings);
+  const apiBaseUrl = useResolvedApiBaseUrl();
   const setActiveCvId = useAppStore((state) => state.setActiveCvId);
   const updateCv = useAppStore((state) => state.updateCv);
   const createCv = useAppStore((state) => state.createCv);
@@ -337,7 +345,7 @@ function CvScreen({ next }: { next: () => void }) {
 
   const importFile = async () => {
     try {
-      const result = await pickCvDocument(settings.apiBaseUrl);
+      const result = await pickCvDocument(apiBaseUrl);
       if (!result) return;
       const imported = parseRawCvText(addCvFromText(result.name, result.text));
       updateCv(imported);
@@ -368,7 +376,7 @@ function CvScreen({ next }: { next: () => void }) {
     setLoading(true);
     const result = await generateAIResult({
       task: "organizeSkills",
-      apiBaseUrl: settings.apiBaseUrl,
+      apiBaseUrl,
       provider: settings.aiProvider,
       input: { rawText: draft, currentSkills: cv.skills }
     });
@@ -432,6 +440,7 @@ function CvScreen({ next }: { next: () => void }) {
 function BulletScreen({ next }: { next: () => void }) {
   const cv = useActiveCv();
   const settings = useAppStore((state) => state.settings);
+  const apiBaseUrl = useResolvedApiBaseUrl();
   const updateCv = useAppStore((state) => state.updateCv);
   const addHistory = useAppStore((state) => state.addHistory);
   const spendCredit = useAppStore((state) => state.spendCredit);
@@ -451,7 +460,7 @@ function BulletScreen({ next }: { next: () => void }) {
     setLoading(true);
     const result = await generateAIResult({
       task: "rewriteBullets",
-      apiBaseUrl: settings.apiBaseUrl,
+      apiBaseUrl,
       provider: settings.aiProvider,
       input: { bullets: source, jobDescription: settings.lastJobDescription, tone: settings.tone }
     });
@@ -490,6 +499,7 @@ function BulletScreen({ next }: { next: () => void }) {
 
 function JobScreen({ next }: { next: () => void }) {
   const settings = useAppStore((state) => state.settings);
+  const apiBaseUrl = useResolvedApiBaseUrl();
   const updateSettings = useAppStore((state) => state.updateSettings);
   const spendCredit = useAppStore((state) => state.spendCredit);
   const addHistory = useAppStore((state) => state.addHistory);
@@ -505,7 +515,7 @@ function JobScreen({ next }: { next: () => void }) {
     setLoading(true);
     const result = await generateAIResult({
       task: "analyzeJob",
-      apiBaseUrl: settings.apiBaseUrl,
+      apiBaseUrl,
       provider: settings.aiProvider,
       input: { jobDescription: settings.lastJobDescription }
     });
@@ -534,6 +544,7 @@ function JobScreen({ next }: { next: () => void }) {
 function OptimizeScreen({ next }: { next: () => void }) {
   const cv = useActiveCv();
   const settings = useAppStore((state) => state.settings);
+  const apiBaseUrl = useResolvedApiBaseUrl();
   const updateCv = useAppStore((state) => state.updateCv);
   const addHistory = useAppStore((state) => state.addHistory);
   const spendCredit = useAppStore((state) => state.spendCredit);
@@ -551,7 +562,7 @@ function OptimizeScreen({ next }: { next: () => void }) {
     setLoading(true);
     const result = await generateAIResult({
       task: "optimizeCv",
-      apiBaseUrl: settings.apiBaseUrl,
+      apiBaseUrl,
       provider: settings.aiProvider,
       input: { cv, jobDescription: settings.lastJobDescription, tone: settings.tone }
     });
@@ -606,6 +617,7 @@ function OptimizeScreen({ next }: { next: () => void }) {
 function AtsScreen({ next }: { next: () => void }) {
   const cv = useActiveCv();
   const settings = useAppStore((state) => state.settings);
+  const apiBaseUrl = useResolvedApiBaseUrl();
   const updateCv = useAppStore((state) => state.updateCv);
   const addHistory = useAppStore((state) => state.addHistory);
   const spendCredit = useAppStore((state) => state.spendCredit);
@@ -621,7 +633,7 @@ function AtsScreen({ next }: { next: () => void }) {
     setLoading(true);
     const result = await generateAIResult({
       task: "atsCheck",
-      apiBaseUrl: settings.apiBaseUrl,
+      apiBaseUrl,
       provider: settings.aiProvider,
       input: { cv, jobDescription: settings.lastJobDescription }
     });
@@ -828,6 +840,7 @@ function CvPreviewSection({ title, children }: { title: string; children: React.
 function InterviewScreen() {
   const cv = useActiveCv();
   const settings = useAppStore((state) => state.settings);
+  const apiBaseUrl = useResolvedApiBaseUrl();
   const spendCredit = useAppStore((state) => state.spendCredit);
   const addHistory = useAppStore((state) => state.addHistory);
   const [pack, setPack] = useState<InterviewPack | null>(null);
@@ -847,7 +860,7 @@ function InterviewScreen() {
     setLoading(true);
     const questionResult = await generateAIResult({
       task: "interviewQuestions",
-      apiBaseUrl: settings.apiBaseUrl,
+      apiBaseUrl,
       provider: settings.aiProvider,
       input: { cv, jobDescription: settings.lastJobDescription }
     });
@@ -858,7 +871,7 @@ function InterviewScreen() {
     const flatQuestions = parsedQuestions.categories.flatMap((category) => category.items);
     const answerResult = await generateAIResult({
       task: "interviewAnswers",
-      apiBaseUrl: settings.apiBaseUrl,
+      apiBaseUrl,
       provider: settings.aiProvider,
       input: { questions: flatQuestions, cv, jobDescription: settings.lastJobDescription }
     });
@@ -887,7 +900,7 @@ function InterviewScreen() {
     const starDraft = buildStarDraft(starSituation, starTask, starAction, starResult);
     const result = await generateAIResult({
       task: "interviewAnswers",
-      apiBaseUrl: settings.apiBaseUrl,
+      apiBaseUrl,
       provider: settings.aiProvider,
       input: {
         questions: [pair.question],
@@ -1024,6 +1037,7 @@ function HistoryScreen() {
 
 function SettingsScreen() {
   const settings = useAppStore((state) => state.settings);
+  const apiBaseUrl = useResolvedApiBaseUrl();
   const creditTransactions = useAppStore((state) => state.creditTransactions);
   const updateSettings = useAppStore((state) => state.updateSettings);
   const restoreCredits = useAppStore((state) => state.restoreCredits);
@@ -1032,6 +1046,7 @@ function SettingsScreen() {
   const resetLocalData = useAppStore((state) => state.resetLocalData);
   const [backupMode, setBackupMode] = useState<"merge" | "replace">("merge");
   const [message, setMessage] = useState("");
+  const developerMode = isDeveloperBuild();
 
   const buy = async (productId: ProductId) => {
     const result = await purchaseCredits(productId);
@@ -1043,20 +1058,6 @@ function SettingsScreen() {
     const result = await restorePurchases();
     if (result.ok) restoreCredits(result.credits, "restore", `Restored ${result.credits} credits`);
     setMessage(result.message);
-  };
-
-  const testProvider = async () => {
-    try {
-      const response = await fetch(`${settings.apiBaseUrl}/api/provider-test`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-        body: JSON.stringify({ provider: settings.aiProvider })
-      });
-      const data = (await response.json()) as { ok?: boolean; provider?: string; model?: string; error?: string };
-      setMessage(data.ok ? `${data.provider} connected with ${data.model}.` : data.error || "Provider test failed.");
-    } catch {
-      setMessage("Could not reach the API server.");
-    }
   };
 
   const importBackup = async () => {
@@ -1072,13 +1073,35 @@ function SettingsScreen() {
     }
   };
 
+  const testProvider = async () => {
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/provider-test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        body: JSON.stringify({ provider: settings.aiProvider })
+      });
+      const data = (await response.json()) as { ok?: boolean; provider?: string; model?: string; error?: string };
+      setMessage(data.ok ? `${data.provider} connected with ${data.model}.` : data.error || "Provider test failed.");
+    } catch {
+      setMessage("Could not reach the API server.");
+    }
+  };
+
+  const developerStatus = embeddedStatus(apiBaseUrl, settings.apiBaseUrl);
+
   return (
     <Section>
-      <Title title="Settings" subtitle="Provider, backups, and credits." />
-      <Field label="API URL" value={settings.apiBaseUrl} onChangeText={(apiBaseUrl) => updateSettings({ apiBaseUrl })} />
-      <Text style={styles.subheadCompact}>Provider</Text>
-      <Segmented options={[{ label: "Groq", value: "groq" }, { label: "OpenAI", value: "openai" }]} value={settings.aiProvider} onChange={(aiProvider) => updateSettings({ aiProvider })} />
-      <View style={{ height: 12 }} />
+      <Title title="Settings" subtitle={developerMode ? "Backups, credits, and developer tools." : "Backups and credits."} />
+      {developerMode ? (
+        <>
+          <Text style={styles.subheadCompact}>Developer</Text>
+          <Field label="API URL" value={settings.apiBaseUrl} onChangeText={(apiBaseUrl) => updateSettings({ apiBaseUrl })} />
+          <Text style={styles.mutedLine}>{developerStatus}</Text>
+          <Text style={styles.subheadCompact}>Provider</Text>
+          <Segmented options={[{ label: "Groq", value: "groq" }, { label: "OpenAI", value: "openai" }]} value={settings.aiProvider} onChange={(aiProvider) => updateSettings({ aiProvider })} />
+          <View style={{ height: 12 }} />
+        </>
+      ) : null}
       <Text style={styles.subheadCompact}>Tone</Text>
       <Segmented options={[{ label: "Direct", value: "direct" }, { label: "Executive", value: "executive" }, { label: "Technical", value: "technical" }]} value={settings.tone} onChange={(tone) => updateSettings({ tone })} />
       <Text style={styles.subheadCompact}>Backup</Text>
@@ -1096,7 +1119,7 @@ function SettingsScreen() {
       {!canAfford("profileSummary") ? <Text style={styles.warningText}>No-credit state: AI features are paused until you add or restore credits.</Text> : null}
       {!!message && <Text style={styles.status}>{message}</Text>}
       <ActionRow>
-        <Button label="Test" onPress={testProvider} />
+        {developerMode ? <Button label="Test" onPress={testProvider} /> : null}
         <Button label="Restore" onPress={restore} variant="secondary" />
         <Button label="Import" onPress={importBackup} variant="secondary" />
         <Button label="Reset" onPress={resetLocalData} variant="ghost" />
@@ -1112,6 +1135,14 @@ function SettingsScreen() {
     </Section>
   );
 }
+
+function embeddedStatus(resolvedApiBaseUrl: string, settingsApiBaseUrl: string) {
+  if (isDeveloperBuild()) {
+    return `Current API: ${resolvedApiBaseUrl || settingsApiBaseUrl || "Not set"}`;
+  }
+  return "The app uses its built-in AI connection.";
+}
+
 
 function InsightList({ title, items }: { title: string; items: string[] }) {
   if (!items.length) return null;

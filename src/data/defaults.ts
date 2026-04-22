@@ -16,13 +16,14 @@ export const emptyProfile: Profile = {
 
 export const starterCv: Cv = {
   id: "cv_default",
-  name: "Primary CV",
+  name: "Ana Özgeçmiş",
   summary: "",
   skills: [],
   experience: [],
   education: [],
   rawText: "",
   templateId: "ats-balanced",
+  spacingId: "balanced",
   mode: "ats",
   sectionOrder: ["summary", "skills", "experience", "education"],
   updatedAt: new Date().toISOString()
@@ -31,9 +32,12 @@ export const starterCv: Cv = {
 export const defaultSettings: Settings = {
   apiBaseUrl: embeddedApiBaseUrl || "http://localhost:8787",
   aiProvider: "groq",
+  language: "tr",
   tone: "direct",
   credits: 12,
-  lastJobDescription: ""
+  lastJobDescription: "",
+  onboardingSeen: false,
+  aiDataConsent: null
 };
 
 export const defaultData: LocalData = {

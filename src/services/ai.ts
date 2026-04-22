@@ -2,6 +2,7 @@ import { AiProvider, AiTask } from "../types";
 import { preserveUtf8 } from "../utils/text";
 import { CLIENT_PROMPT_VERSION, fallbackResult, normalizeAIOutput, NormalizedAI } from "./aiContracts";
 import { normalizeNetworkError } from "../utils/userMessages";
+import { useAppStore } from "../store/useAppStore";
 
 type AiRequest = {
   task: AiTask;
@@ -21,7 +22,21 @@ const memoryCache = new Map<string, AiResult>();
 const MAX_CACHE_ITEMS = 40;
 
 export async function generateAIResult({ task, input, provider = "groq", apiBaseUrl }: AiRequest): Promise<AiResult> {
-  const cacheKey = createCacheKey({ task, input, provider, promptVersion: CLIENT_PROMPT_VERSION });
+  const language = useAppStore.getState().settings.language;
+  const consent = useAppStore.getState().settings.aiDataConsent;
+  const effectiveInput = { ...input, language };
+  if (consent !== true) {
+    const fallback = fallbackResult(task);
+    return {
+      ...fallback,
+      message: language === "tr" ? "AI veri paylaşımı kapalı. AI özellikleri için Ayarlardan izin verebilirsiniz." : "AI data sharing is off. You can enable it in Settings to use AI features.",
+      provider,
+      promptVersion: CLIENT_PROMPT_VERSION,
+      cacheKey: createCacheKey({ task, input: effectiveInput, provider, promptVersion: CLIENT_PROMPT_VERSION, consent: false })
+    };
+  }
+
+  const cacheKey = createCacheKey({ task, input: effectiveInput, provider, promptVersion: CLIENT_PROMPT_VERSION });
   const cached = memoryCache.get(cacheKey);
   if (cached) return cached;
 
@@ -32,7 +47,7 @@ export async function generateAIResult({ task, input, provider = "groq", apiBase
     const response = await fetch(`${apiBaseUrl}/api/ai`, {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify({ task, input, provider, promptVersion: CLIENT_PROMPT_VERSION }),
+      body: JSON.stringify({ task, input: effectiveInput, provider, promptVersion: CLIENT_PROMPT_VERSION }),
       signal: controller.signal
     });
 

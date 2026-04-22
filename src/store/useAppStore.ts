@@ -35,21 +35,23 @@ export const useAppStore = create<AppState>()(
       hydrated: false,
       setHydrated: (hydrated) => set({ hydrated }),
       setActiveCvId: (id) => set({ activeCvId: id }),
-      updateProfile: (profile) => set((state) => ({ profile: { ...state.profile, ...profile } })),
-      updateSettings: (settings) => set((state) => ({ settings: { ...state.settings, ...settings } })),
+      updateProfile: (profile) => set((state) => ({ profile: normalizeProfile({ ...state.profile, ...profile }) })),
+      updateSettings: (settings) => set((state) => ({ settings: normalizeSettings({ ...state.settings, ...settings }) })),
       updateCv: (cv) =>
         set((state) => ({
           cvs: state.cvs.map((item) => (item.id === cv.id ? normalizeCv({ ...cv, updatedAt: new Date().toISOString() }) : item))
         })),
-      createCv: (name = "New CV") => {
-        const cv = normalizeCv({ ...defaultData.cvs[0], id: shortId("cv"), name, rawText: "", summary: "", skills: [], experience: [], education: [], updatedAt: new Date().toISOString() });
+      createCv: (name) => {
+        const defaultName = get().settings.language === "tr" ? "Yeni Özgeçmiş" : "New CV";
+        const cv = normalizeCv({ ...defaultData.cvs[0], id: shortId("cv"), name: name ?? defaultName, rawText: "", summary: "", skills: [], experience: [], education: [], updatedAt: new Date().toISOString() });
         set((state) => ({ cvs: [cv, ...state.cvs], activeCvId: cv.id }));
         return cv;
       },
       duplicateCv: (id) =>
         set((state) => {
           const source = state.cvs.find((cv) => cv.id === id) ?? state.cvs[0];
-          const copy = normalizeCv({ ...source, id: shortId("cv"), name: `${source.name} Copy`, updatedAt: new Date().toISOString() });
+          const suffix = state.settings.language === "tr" ? "Kopya" : "Copy";
+          const copy = normalizeCv({ ...source, id: shortId("cv"), name: `${source.name} ${suffix}`, updatedAt: new Date().toISOString() });
           return { cvs: [copy, ...state.cvs], activeCvId: copy.id };
         }),
       deleteCv: (id) =>
@@ -62,13 +64,14 @@ export const useAppStore = create<AppState>()(
         const normalized = preserveUtf8(text);
         const cv: Cv = normalizeCv({
           id: shortId("cv"),
-          name,
+          name: preserveUtf8(name),
           summary: "",
           skills: [],
           experience: [],
           education: [],
           rawText: normalized,
           templateId: "ats-balanced",
+          spacingId: "balanced",
           mode: "ats",
           sectionOrder: ["summary", "skills", "experience", "education"],
           updatedAt: new Date().toISOString()
@@ -97,13 +100,19 @@ export const useAppStore = create<AppState>()(
         return true;
       },
       restoreCredits: (credits, action = "restore", note = "Credits restored") =>
-        set((state) => ({
-          settings: { ...state.settings, credits: Math.max(state.settings.credits, credits) },
-          creditTransactions: [
-            { id: shortId("credit"), action, amount: credits, createdAt: new Date().toISOString(), note },
-            ...state.creditTransactions
-          ].slice(0, 60)
-        })),
+        set((state) => {
+          const nextBalance = Math.max(state.settings.credits, credits);
+          const delta = Math.max(0, nextBalance - state.settings.credits);
+          return {
+            settings: { ...state.settings, credits: nextBalance },
+            creditTransactions: delta
+              ? [
+                  { id: shortId("credit"), action, amount: delta, createdAt: new Date().toISOString(), note },
+                  ...state.creditTransactions
+                ].slice(0, 60)
+              : state.creditTransactions
+          };
+        }),
       getCreditBalance: () => get().settings.credits,
       canAfford: (action) => get().settings.credits >= getCreditCost(action),
       importLocalData: (data, mode = "merge") =>
@@ -112,11 +121,11 @@ export const useAppStore = create<AppState>()(
           const cvs = Array.isArray(data.cvs) && data.cvs.length ? data.cvs.map(normalizeCv) : base.cvs.map(normalizeCv);
           return {
             localDataVersion: LOCAL_DATA_VERSION,
-            profile: { ...base.profile, ...(data.profile ?? {}) },
+            profile: normalizeProfile({ ...base.profile, ...(data.profile ?? {}) }),
             cvs,
             history: Array.isArray(data.history) ? data.history.slice(0, 40) : base.history,
             creditTransactions: Array.isArray(data.creditTransactions) ? data.creditTransactions.slice(0, 60) : base.creditTransactions,
-            settings: { ...base.settings, ...(data.settings ?? {}) },
+            settings: normalizeSettings({ ...base.settings, ...(data.settings ?? {}) }),
             activeCvId: cvs[0]?.id ?? base.activeCvId
           };
         }),
@@ -148,22 +157,82 @@ export const selectActiveCv = (state: AppState) =>
   state.cvs.find((cv) => cv.id === state.activeCvId) ?? state.cvs[0];
 
 function migrateLocalData(persisted: Partial<AppState>): Partial<AppState> {
+  const persistedSettings = (persisted.settings ?? {}) as Partial<Settings>;
+  const language = persistedSettings.language === "en" || persistedSettings.language === "tr" ? persistedSettings.language : defaultData.settings.language;
+  const aiDataConsent = typeof persistedSettings.aiDataConsent === "boolean" ? persistedSettings.aiDataConsent : null;
   return {
     ...defaultData,
     ...persisted,
     localDataVersion: LOCAL_DATA_VERSION,
-    profile: { ...defaultData.profile, ...(persisted.profile ?? {}) },
+    profile: normalizeProfile({ ...defaultData.profile, ...(persisted.profile ?? {}) }),
     cvs: Array.isArray(persisted.cvs) && persisted.cvs.length ? persisted.cvs.map(normalizeCv) : defaultData.cvs,
     history: Array.isArray(persisted.history) ? persisted.history.slice(0, 40) : [],
     creditTransactions: Array.isArray(persisted.creditTransactions) ? persisted.creditTransactions.slice(0, 60) : [],
-    settings: { ...defaultData.settings, ...(persisted.settings ?? {}) },
+    settings: normalizeSettings({
+      ...defaultData.settings,
+      ...persistedSettings,
+      language,
+      onboardingSeen: Boolean(persistedSettings.onboardingSeen),
+      aiDataConsent
+    }),
     activeCvId: persisted.activeCvId ?? persisted.cvs?.[0]?.id ?? defaultData.cvs[0].id
   };
 }
 
+function normalizeProfile(profile: Profile): Profile {
+  return {
+    ...profile,
+    fullName: preserveUtf8(profile.fullName),
+    title: preserveUtf8(profile.title),
+    location: preserveUtf8(profile.location),
+    email: preserveUtf8(profile.email),
+    phone: preserveUtf8(profile.phone),
+    links: preserveUtf8(profile.links),
+    summary: preserveUtf8(profile.summary),
+    skills: Array.isArray(profile.skills) ? profile.skills.map((skill) => preserveUtf8(skill)).filter(Boolean) : []
+  };
+}
+
+function normalizeSettings(settings: Settings): Settings {
+  return {
+    ...settings,
+    apiBaseUrl: preserveUtf8(settings.apiBaseUrl),
+    lastJobDescription: preserveUtf8(settings.lastJobDescription),
+    language: settings.language === "en" || settings.language === "tr" ? settings.language : defaultData.settings.language,
+    aiDataConsent: typeof settings.aiDataConsent === "boolean" ? settings.aiDataConsent : null,
+    onboardingSeen: Boolean(settings.onboardingSeen)
+  };
+}
+
 function normalizeCv(cv: Cv): Cv {
+  const incomingTemplateId = String(cv.templateId ?? "");
+  const templateId = incomingTemplateId === "human-elegant" ? "human-focus" : incomingTemplateId;
+  const spacingId = cv.spacingId === "compact" || cv.spacingId === "balanced" || cv.spacingId === "spacious" ? cv.spacingId : defaultData.cvs[0].spacingId;
   return {
     ...cv,
+    name: preserveUtf8(cv.name),
+    summary: preserveUtf8(cv.summary),
+    skills: Array.isArray(cv.skills) ? cv.skills.map((skill) => preserveUtf8(skill)).filter(Boolean) : [],
+    experience: Array.isArray(cv.experience)
+      ? cv.experience.map((item) => ({
+          ...item,
+          company: preserveUtf8(item.company),
+          role: preserveUtf8(item.role),
+          period: preserveUtf8(item.period),
+          bullets: Array.isArray(item.bullets) ? item.bullets.map((bullet) => preserveUtf8(bullet)).filter(Boolean) : []
+        }))
+      : [],
+    education: Array.isArray(cv.education)
+      ? cv.education.map((item) => ({
+          ...item,
+          school: preserveUtf8(item.school),
+          degree: preserveUtf8(item.degree),
+          period: preserveUtf8(item.period)
+        }))
+      : [],
+    rawText: preserveUtf8(cv.rawText),
+    templateId: templateId === "ats-compact" || templateId === "ats-balanced" || templateId === "ats-spacious" || templateId === "human-focus" ? templateId : defaultData.cvs[0].templateId,
+    spacingId,
     sectionOrder: Array.isArray(cv.sectionOrder) && cv.sectionOrder.length ? cv.sectionOrder : ["summary", "skills", "experience", "education"]
   };
 }

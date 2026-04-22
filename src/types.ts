@@ -1,8 +1,10 @@
 export type Tone = "direct" | "executive" | "technical";
 export type AiProvider = "groq" | "openai";
+export type AppLanguage = "tr" | "en";
 export type CvMode = "ats" | "human";
 export type CvSectionId = "summary" | "skills" | "experience" | "education";
-export type TemplateId = "ats-compact" | "ats-balanced" | "ats-spacious" | "human-focus" | "human-elegant";
+export type TemplateId = "ats-compact" | "ats-balanced" | "ats-spacious" | "human-focus";
+export type SpacingId = "compact" | "balanced" | "spacious";
 
 export type Profile = {
   fullName: string;
@@ -39,6 +41,7 @@ export type Cv = {
   education: Education[];
   rawText: string;
   templateId: TemplateId;
+  spacingId: SpacingId;
   mode: CvMode;
   sectionOrder: CvSectionId[];
   updatedAt: string;
@@ -98,9 +101,12 @@ export type HistoryItem = {
 export type Settings = {
   apiBaseUrl: string;
   aiProvider: AiProvider;
+  language: AppLanguage;
   tone: Tone;
   credits: number;
   lastJobDescription: string;
+  onboardingSeen: boolean;
+  aiDataConsent: boolean | null;
 };
 
 export type CreditAction =

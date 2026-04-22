@@ -11,6 +11,7 @@ const { PROMPT_VERSION } = require("./prompts");
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 const rateMap = new Map();
+const TURKISH_LOCALE = "tr-TR";
 const allowedTasks = new Set(["profileSummary", "rewriteBullets", "organizeSkills", "analyzeJob", "optimizeCv", "atsCheck", "interviewQuestions", "interviewAnswers"]);
 const allowedProviders = new Set(["groq", "openai"]);
 const allowedImportTypes = new Set([
@@ -22,7 +23,11 @@ const allowedImportTypes = new Set([
 ]);
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
-app.use(express.json({ limit: "1mb", type: "application/json" }));
+app.use((request, response, next) => {
+  response.setHeader("Content-Type", "application/json; charset=utf-8");
+  next();
+});
+app.use(express.json({ limit: "1mb", type: ["application/json", "application/*+json"] }));
 
 app.use((request, response, next) => {
   const ip = request.ip || "local";
@@ -53,8 +58,7 @@ app.post("/api/ai", async (request, response) => {
     const output = await withTimeout(generateAIResponse({ task, input }, provider), 22000);
     if (!output) return response.status(502).json({ error: "Empty AI output" });
     logEvent("ai.complete", { task, provider, ms: Date.now() - started, status: 200 });
-    response.setHeader("Content-Type", "application/json; charset=utf-8");
-    response.json({ output, provider, model: getAIModel(provider), promptVersion: PROMPT_VERSION });
+    response.json({ output: preserveUtf8(output), provider, model: getAIModel(provider), promptVersion: PROMPT_VERSION });
   } catch (error) {
     logEvent("ai.error", { message: error.message, ms: Date.now() - started, status: 503 });
     response.status(503).json({ error: normalizeProviderError(error) });
@@ -76,7 +80,7 @@ app.post("/api/import", upload.single("file"), async (request, response) => {
   try {
     if (!request.file) return response.status(400).json({ error: "Missing file" });
     if (!allowedImportTypes.has(request.file.mimetype)) return response.status(415).json({ error: "Unsupported file type" });
-    const name = request.file.originalname.toLowerCase();
+    const name = preserveUtf8(request.file.originalname).toLocaleLowerCase(TURKISH_LOCALE);
     if (!/\.(pdf|docx|doc|txt)$/i.test(name)) return response.status(415).json({ error: "Unsupported file extension" });
     let text = "";
 
@@ -90,8 +94,7 @@ app.post("/api/import", upload.single("file"), async (request, response) => {
       text = request.file.buffer.toString("utf8");
     }
 
-    response.setHeader("Content-Type", "application/json; charset=utf-8");
-    response.json({ text: text.normalize("NFC") });
+    response.json({ text: preserveUtf8(text) });
   } catch (error) {
     logEvent("import.error", { message: error.message, status: 422 });
     response.status(422).json({ error: normalizeImportError(error) });
@@ -125,9 +128,14 @@ function logEvent(event, fields) {
 
 function normalizeImportError(error) {
   const message = error?.message || "";
-  if (message.toLowerCase().includes("password")) return "Encrypted documents are not supported.";
-  if (message.toLowerCase().includes("pdf")) return "Could not read this PDF. Paste the CV text instead.";
+  const normalized = message.toLocaleLowerCase(TURKISH_LOCALE);
+  if (normalized.includes("password")) return "Encrypted documents are not supported.";
+  if (normalized.includes("pdf")) return "Could not read this PDF. Paste the CV text instead.";
   return "Could not parse this document. Paste the CV text instead.";
+}
+
+function preserveUtf8(value) {
+  return String(value || "").normalize("NFC");
 }
 
 const port = Number(process.env.PORT || 8787);

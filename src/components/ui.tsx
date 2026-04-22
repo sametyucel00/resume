@@ -197,7 +197,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     alignItems: "center",
     justifyContent: "center",
-    width: "100%"
+    minWidth: 96,
+    flexGrow: 1,
+    flexBasis: 0
   },
   primaryButton: {
     backgroundColor: colors.ink
@@ -208,7 +210,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white
   },
   ghostButton: {
-    backgroundColor: "transparent"
+    borderWidth: 1,
+    borderColor: "#D7DDEA",
+    backgroundColor: "#F7F8FC"
   },
   buttonText: {
     color: colors.ink,
@@ -220,6 +224,7 @@ const styles = StyleSheet.create({
   },
   segmented: {
     flexDirection: "row",
+    flexWrap: "wrap",
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.white,
@@ -228,7 +233,8 @@ const styles = StyleSheet.create({
     gap: 3
   },
   segment: {
-    flex: 1,
+    minWidth: 96,
+    flexGrow: 1,
     minHeight: 36,
     alignItems: "center",
     justifyContent: "center",

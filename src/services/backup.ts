@@ -3,8 +3,10 @@ import * as FileSystem from "expo-file-system";
 import { Platform } from "react-native";
 import { LocalData } from "../types";
 import { preserveUtf8 } from "../utils/text";
+import { useAppStore } from "../store/useAppStore";
 
 export async function pickJsonBackup(): Promise<Partial<LocalData> | null> {
+  const language = useAppStore.getState().settings.language;
   const result = await DocumentPicker.getDocumentAsync({
     type: ["application/json", "text/json", "text/plain"],
     copyToCacheDirectory: true
@@ -16,9 +18,9 @@ export async function pickJsonBackup(): Promise<Partial<LocalData> | null> {
     ? await asset.file?.text()
     : await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.UTF8 });
 
-  if (!text) throw new Error("Backup file is empty");
+  if (!text) throw new Error(language === "tr" ? "Yedek dosyası boş." : "Backup file is empty");
   const parsed = JSON.parse(preserveUtf8(text)) as Partial<LocalData>;
-  if (!isBackupShape(parsed)) throw new Error("Backup file is not a CV Optimizer backup");
+  if (!isBackupShape(parsed)) throw new Error(language === "tr" ? "Bu dosya geçerli bir Hirvia yedeği değil." : "Backup file is not a Hirvia backup");
   return parsed;
 }
 

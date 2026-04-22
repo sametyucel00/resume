@@ -1,38 +1,40 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Image, ImageStyle, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button, EmptyState, Field, Screen, Section, Segmented, Skeleton, Title, colors } from "./src/components/ui";
 import * as Clipboard from "expo-clipboard";
 import { pickJsonBackup } from "./src/services/backup";
 import { estimateCvParseConfidence, parseRawCvText } from "./src/services/cvParser";
 import { AiResult, generateAIResult } from "./src/services/ai";
-import { copyTextExport, exportJson, exportPdf, exportText, previewTextExport } from "./src/services/exporter";
+import { copyTextExport, exportPdf, exportText } from "./src/services/exporter";
 import { pickCvDocument } from "./src/services/importer";
 import { creditProducts, ProductId, purchaseCredits, restorePurchases } from "./src/services/purchases";
 import { templates } from "./src/services/templates";
 import { selectActiveCv, useAppStore } from "./src/store/useAppStore";
-import { AiTask, AtsReport, Cv, CvMode, CvSectionId, InterviewCategory, InterviewPack, JobAnalysis, OptimizedCvDraft, Profile, TemplateId } from "./src/types";
+import { AiTask, AppLanguage, AtsReport, Cv, CvMode, CvSectionId, InterviewCategory, InterviewPack, JobAnalysis, OptimizedCvDraft, Profile, SpacingId, TemplateId } from "./src/types";
 import { parseLooseJson } from "./src/utils/json";
-import { splitCsv, splitLines, shortId } from "./src/utils/text";
-import { isDeveloperBuild, resolveApiBaseUrl } from "./src/config/runtime";
+import { splitCsv, splitLines, shortId, TURKISH_LOCALE } from "./src/utils/text";
+import { resolveApiBaseUrl } from "./src/config/runtime";
+import { t, tf } from "./src/i18n";
 
 type Step = "profile" | "cv" | "bullets" | "job" | "optimize" | "ats" | "export" | "interview" | "history" | "settings";
 
-const hirviaLogo = require("./assets/branding/hirvia-logo.png");
 const hirviaIcon = require("./assets/branding/hirvia-icon-final.png");
 
-const steps: { id: Step; label: string; marker: string }[] = [
-  { id: "profile", label: "Me", marker: "P" },
-  { id: "cv", label: "CV", marker: "C" },
-  { id: "bullets", label: "Edit", marker: "B" },
-  { id: "job", label: "Job", marker: "J" },
-  { id: "optimize", label: "Draft", marker: "O" },
-  { id: "ats", label: "ATS", marker: "A" },
-  { id: "export", label: "Export", marker: "E" },
-  { id: "interview", label: "Prep", marker: "I" },
-  { id: "history", label: "Log", marker: "L" },
-  { id: "settings", label: "Prefs", marker: "S" }
-];
+function getSteps(language: AppLanguage): { id: Step; label: string; title: string; marker: string }[] {
+  return [
+    { id: "profile", label: t(language, "step_profile"), title: t(language, "profile_title"), marker: language === "tr" ? "B" : "P" },
+    { id: "cv", label: t(language, "step_cv"), title: t(language, "cv_title"), marker: language === "tr" ? "Ö" : "C" },
+    { id: "bullets", label: t(language, "step_edit"), title: t(language, "bullets_title"), marker: language === "tr" ? "D" : "B" },
+    { id: "job", label: t(language, "step_job"), title: t(language, "job_title"), marker: language === "tr" ? "İ" : "J" },
+    { id: "optimize", label: t(language, "step_draft"), title: t(language, "optimize_title"), marker: language === "tr" ? "T" : "O" },
+    { id: "ats", label: t(language, "step_ats"), title: t(language, "ats_title"), marker: "A" },
+    { id: "export", label: t(language, "step_export"), title: t(language, "export_title"), marker: language === "tr" ? "D" : "E" },
+    { id: "interview", label: t(language, "step_prep"), title: t(language, "interview_title"), marker: language === "tr" ? "H" : "I" },
+    { id: "history", label: t(language, "step_history"), title: t(language, "history_title"), marker: language === "tr" ? "G" : "L" },
+    { id: "settings", label: t(language, "step_settings"), title: t(language, "settings_title"), marker: language === "tr" ? "A" : "S" }
+  ];
+}
 
 export default function App() {
   return (
@@ -73,21 +75,21 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, AppError
 
   render() {
     if (!this.state.hasError) return this.props.children;
+    const language = useAppStore.getState().settings.language;
     return (
       <SafeAreaView style={styles.safe}>
         <Screen>
           <Section>
-            <Title title="App error" subtitle="A runtime issue blocked the screen. Local data is still on this device." />
+            <Title title={t(language, "app_error_title")} subtitle={t(language, "app_error_subtitle")} />
             <View style={styles.brandCard}>
-              <Image source={hirviaIcon} style={styles.brandIcon} resizeMode="contain" />
-              <Image source={hirviaLogo} style={styles.brandLogo} resizeMode="contain" />
+              <BrandLockup variant="panel" />
             </View>
             <View style={styles.runtimeErrorBox}>
-              <Text style={styles.runtimeErrorTitle}>Runtime message</Text>
+              <Text style={styles.runtimeErrorTitle}>{t(language, "runtime_message")}</Text>
               <Text style={styles.runtimeErrorText}>{this.state.message}</Text>
             </View>
             <View style={[styles.actions, styles.actionsCompact]}>
-              <Button label="Retry app" onPress={this.retry} />
+              <Button label={t(language, "retry_app")} onPress={this.retry} />
             </View>
           </Section>
         </Screen>
@@ -98,9 +100,18 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, AppError
 
 function AppShell() {
   const [step, setStep] = useState<Step>("profile");
+  const [splashDone, setSplashDone] = useState(false);
   const hydrated = useAppStore((state) => state.hydrated);
+  const language = useAppStore((state) => state.settings.language);
+  const onboardingSeen = useAppStore((state) => state.settings.onboardingSeen);
+  const aiDataConsent = useAppStore((state) => state.settings.aiDataConsent);
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSplashDone(true), 1050);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo?.({ y: 0, animated: false });
@@ -111,10 +122,40 @@ function AppShell() {
       <SafeAreaView style={styles.safe}>
         <Screen>
           <Section>
-            <Image source={hirviaLogo} style={styles.loadingLogo} resizeMode="contain" />
-            <Title title="Hirvia" subtitle="Loading your local workspace." />
+            <BrandLockup variant="loading" />
+            <Title title="Hirvia" subtitle={t(language, "loading_workspace")} />
             <Skeleton lines={5} />
           </Section>
+        </Screen>
+      </SafeAreaView>
+    );
+  }
+
+  if (!splashDone) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <Screen>
+          <SplashScreen />
+        </Screen>
+      </SafeAreaView>
+    );
+  }
+
+  if (!onboardingSeen) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <Screen>
+          <OnboardingScreen />
+        </Screen>
+      </SafeAreaView>
+    );
+  }
+
+  if (aiDataConsent === null) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <Screen>
+          <ConsentGate />
         </Screen>
       </SafeAreaView>
     );
@@ -144,28 +185,119 @@ function AppShell() {
   );
 }
 
+function SplashScreen() {
+  const language = useAppStore((state) => state.settings.language);
+  return (
+    <Section style={styles.splashSection}>
+      <View style={styles.splashMark}>
+        <Image source={hirviaIcon} style={styles.splashIcon as ImageStyle} resizeMode="contain" />
+      </View>
+      <Text style={styles.splashName}>Hirvia</Text>
+      <Text style={styles.splashSubtitle}>{t(language, "splash_subtitle")}</Text>
+      <View style={styles.splashProgress}>
+        <View style={styles.splashProgressFill} />
+      </View>
+    </Section>
+  );
+}
+
+function OnboardingScreen() {
+  const language = useAppStore((state) => state.settings.language);
+  const updateSettings = useAppStore((state) => state.updateSettings);
+  const items = [
+    { title: t(language, "onboarding_step_1_title"), body: t(language, "onboarding_step_1_body") },
+    { title: t(language, "onboarding_step_2_title"), body: t(language, "onboarding_step_2_body") },
+    { title: t(language, "onboarding_step_3_title"), body: t(language, "onboarding_step_3_body") }
+  ];
+
+  return (
+    <ScrollView contentContainerStyle={styles.onboardingScroll} keyboardShouldPersistTaps="handled">
+      <Section style={styles.onboardingSection}>
+        <BrandLockup variant="loading" />
+        <Title title={t(language, "onboarding_title")} subtitle={t(language, "onboarding_subtitle")} />
+        <View style={styles.onboardingList}>
+          {items.map((item, index) => (
+            <View key={item.title} style={styles.onboardingItem}>
+              <View style={styles.onboardingIndex}>
+                <Text style={styles.onboardingIndexText}>{index + 1}</Text>
+              </View>
+              <View style={styles.onboardingCopy}>
+                <Text style={styles.onboardingItemTitle}>{item.title}</Text>
+                <Text style={styles.onboardingItemBody}>{item.body}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+        <View style={styles.infoPanelSoft}>
+          <Text style={styles.infoText}>{t(language, "onboarding_privacy_note")}</Text>
+        </View>
+        <ActionRow>
+          <Button label={t(language, "onboarding_start")} onPress={() => updateSettings({ onboardingSeen: true })} />
+        </ActionRow>
+      </Section>
+    </ScrollView>
+  );
+}
+
+function ConsentGate() {
+  const language = useAppStore((state) => state.settings.language);
+  const updateSettings = useAppStore((state) => state.updateSettings);
+  return (
+    <Section style={styles.consentSection}>
+      <BrandLockup variant="loading" />
+      <Title title={t(language, "ai_consent_title")} subtitle={t(language, "ai_consent_subtitle")} />
+      <View style={styles.infoPanel}>
+        <Text style={styles.infoText}>{t(language, "ai_consent_detail")}</Text>
+      </View>
+      <View style={styles.infoPanelSoft}>
+        <Text style={styles.previewLabel}>{t(language, "privacy_policy")} / {t(language, "terms_of_use")}</Text>
+        <Text style={styles.infoText}>{buildLegalUrl("privacy")}</Text>
+        <Text style={styles.infoText}>{buildLegalUrl("terms")}</Text>
+      </View>
+      <ActionRow>
+        <Button label={t(language, "open_privacy")} onPress={() => void openLegalUrl("privacy")} variant="secondary" />
+        <Button label={t(language, "open_terms")} onPress={() => void openLegalUrl("terms")} variant="secondary" />
+      </ActionRow>
+      <ActionRow>
+        <Button label={t(language, "ai_consent_allow")} onPress={() => updateSettings({ aiDataConsent: true })} />
+        <Button label={t(language, "ai_consent_deny")} onPress={() => updateSettings({ aiDataConsent: false })} variant="secondary" />
+      </ActionRow>
+    </Section>
+  );
+}
+
 function Header({ step }: { step: Step }) {
   const credits = useAppStore((state) => state.settings.credits);
-  const currentStep = steps.find((item) => item.id === step);
+  const language = useAppStore((state) => state.settings.language);
+  const updateSettings = useAppStore((state) => state.updateSettings);
+  const steps = useMemo(() => getSteps(language), [language]);
   return (
     <View style={[styles.header, styles.headerCompact]}>
-      <View style={styles.headerTextWrap}>
-        <View style={styles.headerBrandRow}>
-          <Image source={hirviaIcon} style={styles.headerIcon} resizeMode="contain" />
-          <View style={styles.headerBrandTextWrap}>
-            <Image source={hirviaLogo} style={styles.headerLogo} resizeMode="contain" />
-            <Text style={styles.headerStep}>{currentStep?.label}</Text>
+      <View style={styles.headerTopRow}>
+        <View style={styles.headerTextWrap}>
+          <BrandLockup variant="header" />
+        </View>
+        <View style={styles.headerControls}>
+          <View style={styles.languageSwitch}>
+            <Pressable onPress={() => updateSettings({ language: "tr" })} style={[styles.languageChip, language === "tr" && styles.languageChipActive]}>
+              <Text style={[styles.languageChipText, language === "tr" && styles.languageChipTextActive]}>TR</Text>
+            </Pressable>
+            <Pressable onPress={() => updateSettings({ language: "en" })} style={[styles.languageChip, language === "en" && styles.languageChipActive]}>
+              <Text style={[styles.languageChipText, language === "en" && styles.languageChipTextActive]}>EN</Text>
+            </Pressable>
+          </View>
+          <View style={[styles.creditPill, credits <= 0 && styles.creditPillEmpty]}>
+            <Text style={[styles.creditText, credits <= 0 && styles.creditTextEmpty]}>{credits} {language === "tr" ? "Kredi" : "credits"}</Text>
           </View>
         </View>
-      </View>
-      <View style={[styles.creditPill, credits <= 0 && styles.creditPillEmpty]}>
-        <Text style={[styles.creditText, credits <= 0 && styles.creditTextEmpty]}>{credits} credits</Text>
       </View>
     </View>
   );
 }
 
 function Sidebar({ active, onChange, bottomInset }: { active: Step; onChange: (step: Step) => void; bottomInset: number }) {
+  const language = useAppStore((state) => state.settings.language);
+  const steps = useMemo(() => getSteps(language), [language]);
   return (
     <ScrollView horizontal style={[styles.sidebar, styles.sidebarCompact]} contentContainerStyle={[styles.navContent, styles.navContentCompact, { paddingBottom: bottomInset + 6 }]}>
       {steps.map((item, index) => (
@@ -191,6 +323,65 @@ function useActiveCv() {
   return useAppStore(selectActiveCv);
 }
 
+function BrandLockup({ variant }: { variant: "header" | "hero" | "panel" | "loading" }) {
+  return (
+    <View
+      style={[
+        styles.brandLockup,
+        variant === "header" && styles.brandLockupHeader,
+        variant === "hero" && styles.brandLockupHero,
+        variant === "panel" && styles.brandLockupPanel,
+        variant === "loading" && styles.brandLockupLoading
+      ]}
+    >
+      <Image
+        source={hirviaIcon}
+        style={[
+          styles.brandLockupIcon as ImageStyle,
+          variant === "header" && (styles.headerIcon as ImageStyle),
+          variant === "hero" && (styles.heroIcon as ImageStyle),
+          variant === "panel" && (styles.brandIcon as ImageStyle),
+          variant === "loading" && (styles.loadingIcon as ImageStyle)
+        ]}
+        resizeMode="contain"
+      />
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.brandWordmark,
+          variant === "header" && styles.headerWordmark,
+          variant === "hero" && styles.heroWordmark,
+          variant === "panel" && styles.panelWordmark,
+          variant === "loading" && styles.loadingWordmark
+        ]}
+      >
+        Hirvia
+      </Text>
+    </View>
+  );
+}
+
+function buildLegalUrl(section: "privacy" | "terms" | "help" | "subscription") {
+  const envBase = String(process.env.EXPO_PUBLIC_LEGAL_BASE_URL ?? "").trim();
+  const base =
+    envBase ||
+    (typeof window !== "undefined" && window.location?.origin
+      ? `${window.location.origin}/support/index.html`
+      : "");
+  return base ? `${base}#${section}` : `support/index.html#${section}`;
+}
+
+async function openLegalUrl(section: "privacy" | "terms" | "help" | "subscription") {
+  const target = buildLegalUrl(section);
+  if (typeof window !== "undefined") {
+    window.open(target, "_blank", "noopener,noreferrer");
+    return;
+  }
+  if (target.startsWith("http")) {
+    await Linking.openURL(target);
+  }
+}
+
 function useResolvedApiBaseUrl() {
   const settingsApiBaseUrl = useAppStore((state) => state.settings.apiBaseUrl);
   return useMemo(() => resolveApiBaseUrl(settingsApiBaseUrl), [settingsApiBaseUrl]);
@@ -199,6 +390,7 @@ function useResolvedApiBaseUrl() {
 function ProfileScreen({ next }: { next: () => void }) {
   const profile = useAppStore((state) => state.profile);
   const settings = useAppStore((state) => state.settings);
+  const language = settings.language;
   const apiBaseUrl = useResolvedApiBaseUrl();
   const updateProfile = useAppStore((state) => state.updateProfile);
   const spendCredit = useAppStore((state) => state.spendCredit);
@@ -207,8 +399,12 @@ function ProfileScreen({ next }: { next: () => void }) {
   const [message, setMessage] = useState("");
 
   const generate = async () => {
-    if (!spendCredit("profileSummary", "Profile summary generation")) {
-      setMessage("Credits required. Add credits in Settings to use AI.");
+    if (settings.aiDataConsent !== true) {
+      setMessage(t(language, "ai_consent_required"));
+      return;
+    }
+    if (!spendCredit("profileSummary", t(language, "profile_summary_history"))) {
+      setMessage(t(language, "credits_required"));
       return;
     }
     setLoading(true);
@@ -220,38 +416,31 @@ function ProfileScreen({ next }: { next: () => void }) {
     });
     const output = result.output;
     updateProfile({ summary: output });
-    addHistory({ type: "summary", title: "Profile summary", detail: output, ...aiHistoryMeta("profileSummary", result, profile.fullName || profile.title) });
-    setMessage(result.status === "fallback" ? `${result.message} 1 credit used.` : "Summary generated. 1 credit used.");
+    addHistory({ type: "summary", title: t(language, "profile_summary_history"), detail: output, ...aiHistoryMeta("profileSummary", result, profile.fullName || profile.title) });
+    setMessage(result.status === "fallback" ? `${result.message} ${t(language, "credit_used_suffix")}` : t(language, "summary_generated"));
     setLoading(false);
   };
 
   return (
     <Section>
-      <View style={styles.heroPanel}>
-        <View style={styles.heroBrandRow}>
-          <Image source={hirviaIcon} style={styles.heroIcon} resizeMode="contain" />
-          <Image source={hirviaLogo} style={styles.heroLogo} resizeMode="contain" />
-        </View>
-        <Text style={styles.heroLine}>The smart path to getting hired.</Text>
-      </View>
-      <Title title="Profile" subtitle="Set the essentials once." />
-      <Field label="Name" value={profile.fullName} onChangeText={(fullName) => updateProfile({ fullName })} placeholder="Ayse Yilmaz" />
-      <Field label="Target title" value={profile.title} onChangeText={(title) => updateProfile({ title })} placeholder="Product Manager" />
+      <Title title={t(language, "profile_title")} subtitle={t(language, "profile_subtitle")} />
+      <Field label={t(language, "profile_name")} value={profile.fullName} onChangeText={(fullName) => updateProfile({ fullName })} placeholder={t(language, "profile_name_placeholder")} />
+      <Field label={t(language, "profile_target")} value={profile.title} onChangeText={(title) => updateProfile({ title })} placeholder={t(language, "profile_target_placeholder")} />
       <View style={styles.twoCols}>
-        <Field label="Email" value={profile.email} onChangeText={(email) => updateProfile({ email })} placeholder="you@email.com" />
-        <Field label="Phone" value={profile.phone} onChangeText={(phone) => updateProfile({ phone })} placeholder="+90..." />
+        <Field label={t(language, "profile_email")} value={profile.email} onChangeText={(email) => updateProfile({ email })} placeholder={t(language, "profile_email_placeholder")} />
+        <Field label={t(language, "profile_phone")} value={profile.phone} onChangeText={(phone) => updateProfile({ phone })} placeholder="+90..." />
       </View>
-      <Field label="Location and links" value={`${profile.location}${profile.links ? `\n${profile.links}` : ""}`} onChangeText={(value) => {
+      <Field label={t(language, "profile_links")} value={`${profile.location}${profile.links ? `\n${profile.links}` : ""}`} onChangeText={(value) => {
         const [location = "", ...links] = splitLines(value);
         updateProfile({ location, links: links.join("\n") });
-      }} multiline placeholder={"Istanbul\nlinkedin.com/in/..."} />
-      <Field label="Summary" value={profile.summary} onChangeText={(summary) => updateProfile({ summary })} multiline placeholder="Short and specific." />
-      <AiCostHint />
-      {!!message && <Text style={styles.status}>{message}</Text>}
+      }} multiline placeholder={t(language, "profile_links_placeholder")} />
+      <Field label={t(language, "profile_summary")} value={profile.summary} onChangeText={(summary) => updateProfile({ summary })} multiline placeholder={t(language, "summary_placeholder")} />
       <ActionRow>
-        <Button label="Generate summary" onPress={generate} loading={loading} />
-        <Button label="Next" onPress={next} variant="secondary" />
+        <Button label={t(language, "generate")} onPress={generate} loading={loading} />
+        <Button label={t(language, "next")} onPress={next} variant="secondary" />
       </ActionRow>
+      {!!message && <Text style={styles.status}>{message}</Text>}
+      <AiCostHint />
     </Section>
   );
 }
@@ -260,6 +449,7 @@ function CvScreen({ next }: { next: () => void }) {
   const cv = useActiveCv();
   const cvs = useAppStore((state) => state.cvs);
   const settings = useAppStore((state) => state.settings);
+  const language = settings.language;
   const apiBaseUrl = useResolvedApiBaseUrl();
   const setActiveCvId = useAppStore((state) => state.setActiveCvId);
   const updateCv = useAppStore((state) => state.updateCv);
@@ -280,7 +470,7 @@ function CvScreen({ next }: { next: () => void }) {
   const [draftPeriod, setDraftPeriod] = useState(cv.experience[0]?.period ?? "");
   const [draftBullets, setDraftBullets] = useState(cv.experience[0]?.bullets.join("\n") ?? "");
   const [draftEducation, setDraftEducation] = useState(
-    cv.education[0] ? `${cv.education[0].degree}, ${cv.education[0].school} ${cv.education[0].period}`.trim() : ""
+    formatEducationDraft(cv.education[0])
   );
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -289,15 +479,15 @@ function CvScreen({ next }: { next: () => void }) {
     const experience = cv.experience[selectedExperience] ?? cv.experience[0];
     const education = cv.education[selectedEducation] ?? cv.education[0];
     setDraft(cv.rawText);
-    setDraftName(cv.name);
+    setDraftName(localizeCvName(cv.name, language));
     setDraftSummary(cv.summary);
     setDraftSkills(cv.skills.join(", "));
     setDraftRole(experience?.role ?? "");
     setDraftCompany(experience?.company ?? "");
     setDraftPeriod(experience?.period ?? "");
     setDraftBullets(experience?.bullets.join("\n") ?? "");
-    setDraftEducation(education ? `${education.degree}, ${education.school} ${education.period}`.trim() : "");
-  }, [cv.id, selectedExperience, selectedEducation]);
+    setDraftEducation(formatEducationDraft(education));
+  }, [cv.id, language, selectedExperience, selectedEducation]);
 
   const buildStructuredCv = () => {
     const parsed = parseRawCvText({ ...cv, rawText: draft });
@@ -356,21 +546,25 @@ function CvScreen({ next }: { next: () => void }) {
       setDraftCompany(imported.experience[0]?.company ?? "");
       setDraftPeriod(imported.experience[0]?.period ?? "");
       setDraftBullets(imported.experience[0]?.bullets.join("\n") ?? "");
-      addHistory({ type: "import", title: "Imported CV", detail: result.name });
-      setMessage(`CV imported and parsed. Confidence: ${estimateCvParseConfidence(imported)}%. Review editable fields below.`);
+      addHistory({ type: "import", title: t(language, "imported_cv_history"), detail: result.name });
+      setMessage(tf(language, "cv_imported_confidence", { confidence: `${estimateCvParseConfidence(imported)}%` }));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Import failed. Paste the CV text instead.");
+      setMessage(error instanceof Error ? error.message : t(language, "import_failed_paste"));
     }
   };
 
   const save = () => {
     updateCv(buildStructuredCv());
-    setMessage("CV saved locally.");
+    setMessage(t(language, "cv_saved_locally"));
   };
 
   const organizeSkills = async () => {
-    if (!spendCredit("organizeSkills", "Skills organization")) {
-      setMessage("Credits required. Add credits in Settings to use AI.");
+    if (settings.aiDataConsent !== true) {
+      setMessage(t(language, "ai_consent_required"));
+      return;
+    }
+    if (!spendCredit("organizeSkills", t(language, "skills_organized_history"))) {
+      setMessage(t(language, "credits_required"));
       return;
     }
     setLoading(true);
@@ -378,61 +572,58 @@ function CvScreen({ next }: { next: () => void }) {
       task: "organizeSkills",
       apiBaseUrl,
       provider: settings.aiProvider,
-      input: { rawText: draft, currentSkills: cv.skills }
+      input: { rawText: draft, currentSkills: cv.skills, tone: settings.tone }
     });
     const output = result.output;
     const skills = splitCsv(output.replace(/Core:|Tools:|Strengths:/g, ""));
     setDraftSkills(skills.join(", "));
     updateCv({ ...buildStructuredCv(), skills });
-    addHistory({ type: "rewrite", title: "Skills organized", detail: output, ...aiHistoryMeta("organizeSkills", result, draft) });
-    setMessage(result.status === "fallback" ? `${result.message} 1 credit used.` : "Skills organized. 1 credit used.");
+    addHistory({ type: "rewrite", title: t(language, "skills_organized_history"), detail: output, ...aiHistoryMeta("organizeSkills", result, draft) });
+    setMessage(result.status === "fallback" ? `${result.message} ${t(language, "credit_used_suffix")}` : t(language, "skills_organized_done"));
     setLoading(false);
   };
 
   return (
     <Section>
-      <Title title="CV" subtitle="Import or paste your CV, then tighten the core fields." />
-      <ChoiceRail options={cvs.map((item) => ({ label: item.name, value: item.id }))} value={cv.id} onChange={setActiveCvId} />
+      <Title title={t(language, "cv_title")} subtitle={t(language, "cv_subtitle")} />
+      <ChoiceRail options={cvs.map((item) => ({ label: localizeCvName(item.name, language), value: item.id }))} value={cv.id} onChange={setActiveCvId} />
       <ActionRow>
-        <Button label="New" onPress={() => createCv()} variant="secondary" />
-        <Button label="Copy" onPress={() => duplicateCv(cv.id)} variant="secondary" />
-        <Button label="Delete" onPress={() => deleteCv(cv.id)} variant="ghost" />
+        <Button label={t(language, "new_cv")} onPress={() => createCv()} variant="secondary" />
+        <Button label={t(language, "copy")} onPress={() => duplicateCv(cv.id)} variant="secondary" />
+        <Button label={t(language, "delete")} onPress={() => deleteCv(cv.id)} variant="ghost" />
       </ActionRow>
-      <Text style={styles.mutedLine}>Last updated: {new Date(cv.updatedAt).toLocaleString()}</Text>
-      <Field label="CV name" value={draftName} onChangeText={setDraftName} placeholder="Primary CV" />
-      <Field label="CV text" value={draft} onChangeText={setDraft} multiline placeholder="Paste CV text here." />
-      {cv.skills.length ? <Text style={styles.mutedLine}>{cv.skills.slice(0, 12).join(" | ")}</Text> : <EmptyState text="No skills organized yet." />}
+      <Text style={styles.mutedLine}>{t(language, "last_updated")}: {formatDateTime(language, cv.updatedAt)}</Text>
+      <Field label={t(language, "cv_name")} value={draftName} onChangeText={setDraftName} placeholder={t(language, "primary_cv")} />
+      <Field label={t(language, "cv_text")} value={draft} onChangeText={setDraft} multiline placeholder={t(language, "imported_placeholder_cv")} />
       <View style={styles.divider} />
-      <Text style={styles.subheadCompact}>Core</Text>
-      <Field label="Professional summary" value={draftSummary} onChangeText={setDraftSummary} multiline placeholder="2-3 lines with clear role fit." />
-      <Field label="Skills" value={draftSkills} onChangeText={setDraftSkills} placeholder="Strategy, SQL, stakeholder management" />
+      <Text style={styles.subheadCompact}>{t(language, "core_title")}</Text>
+      <Field label={t(language, "professional_summary")} value={draftSummary} onChangeText={setDraftSummary} multiline placeholder={t(language, "imported_placeholder_summary")} />
+      <Field label={t(language, "skills_label")} value={draftSkills} onChangeText={setDraftSkills} placeholder={t(language, "imported_placeholder_skills")} />
       <View style={styles.builderGroup}>
-        <ChoiceRail options={(cv.experience.length ? cv.experience : [{ id: "new", role: "Experience" }]).map((item, index) => ({ label: item.role || `Experience ${index + 1}`, value: String(index) }))} value={String(selectedExperience)} onChange={(value) => setSelectedExperience(Number(value))} />
-        <Field label="Role" value={draftRole} onChangeText={setDraftRole} placeholder="Product Manager" />
-        <Field label="Company" value={draftCompany} onChangeText={setDraftCompany} placeholder="Company" />
-        <Field label="Period" value={draftPeriod} onChangeText={setDraftPeriod} placeholder="2021 - Present" />
-        <Field label="Bullets" value={draftBullets} onChangeText={setDraftBullets} multiline placeholder={"Launched reporting flow\nReduced manual review time\nCoordinated product and sales teams"} />
+        <ChoiceRail options={(cv.experience.length ? cv.experience : [{ id: "new", role: t(language, "experience_fallback") }]).map((item, index) => ({ label: item.role || `${t(language, "experience_section")} ${index + 1}`, value: String(index) }))} value={String(selectedExperience)} onChange={(value) => setSelectedExperience(Number(value))} />
+        <Field label={t(language, "role")} value={draftRole} onChangeText={setDraftRole} placeholder={t(language, "imported_placeholder_role")} />
+        <Field label={t(language, "company")} value={draftCompany} onChangeText={setDraftCompany} placeholder={t(language, "imported_placeholder_company")} />
+        <Field label={t(language, "period")} value={draftPeriod} onChangeText={setDraftPeriod} placeholder={t(language, "imported_placeholder_period")} />
+        <Field label={t(language, "bullets_label")} value={draftBullets} onChangeText={setDraftBullets} multiline placeholder={t(language, "bullet_examples_placeholder")} />
         <ActionRow>
-          <Button label="Add role" onPress={addExperience} variant="secondary" />
-          <Button label="Delete role" onPress={deleteExperience} variant="ghost" disabled={!cv.experience.length} />
+        <Button label={t(language, "add_role")} onPress={addExperience} variant="secondary" />
+        <Button label={t(language, "delete_role")} onPress={deleteExperience} variant="ghost" disabled={!cv.experience.length} />
         </ActionRow>
       </View>
-      <ChoiceRail options={(cv.education.length ? cv.education : [{ id: "new", degree: "Education" }]).map((item, index) => ({ label: item.degree || `Education ${index + 1}`, value: String(index) }))} value={String(selectedEducation)} onChange={(value) => setSelectedEducation(Number(value))} />
-      <Field label="Education" value={draftEducation} onChangeText={setDraftEducation} placeholder="BSc Business, Bogazici University, 2018" />
+      <ChoiceRail options={(cv.education.length ? cv.education : [{ id: "new", degree: t(language, "education_label") }]).map((item, index) => ({ label: item.degree || `${t(language, "education_label")} ${index + 1}`, value: String(index) }))} value={String(selectedEducation)} onChange={(value) => setSelectedEducation(Number(value))} />
+      <Field label={t(language, "education_label")} value={draftEducation} onChangeText={setDraftEducation} placeholder={t(language, "imported_placeholder_education")} />
       <ActionRow>
-        <Button label="Add edu" onPress={addEducation} variant="secondary" />
-        <Button label="Delete edu" onPress={deleteEducation} variant="ghost" disabled={!cv.education.length} />
+        <Button label={t(language, "add_edu")} onPress={addEducation} variant="secondary" />
+        <Button label={t(language, "delete_edu")} onPress={deleteEducation} variant="ghost" disabled={!cv.education.length} />
       </ActionRow>
-      <AiCostHint />
+      <ActionRow>
+        <Button label={t(language, "import")} onPress={importFile} variant="secondary" />
+        <Button label={t(language, "save")} onPress={save} />
+        <Button label={t(language, "skills_label")} onPress={organizeSkills} loading={loading} variant="ghost" />
+        <Button label={t(language, "rewrite")} onPress={next} variant="secondary" />
+      </ActionRow>
       {!!message && <Text style={styles.status}>{message}</Text>}
-      <ActionRow>
-        <Button label="Import" onPress={importFile} variant="secondary" />
-        <Button label="Save" onPress={save} />
-        <Button label="Skills" onPress={organizeSkills} loading={loading} variant="ghost" />
-      </ActionRow>
-      <ActionRow>
-        <Button label="Rewrite" onPress={next} variant="secondary" />
-      </ActionRow>
+      <AiCostHint />
     </Section>
   );
 }
@@ -440,6 +631,7 @@ function CvScreen({ next }: { next: () => void }) {
 function BulletScreen({ next }: { next: () => void }) {
   const cv = useActiveCv();
   const settings = useAppStore((state) => state.settings);
+  const language = settings.language;
   const apiBaseUrl = useResolvedApiBaseUrl();
   const updateCv = useAppStore((state) => state.updateCv);
   const addHistory = useAppStore((state) => state.addHistory);
@@ -453,8 +645,12 @@ function BulletScreen({ next }: { next: () => void }) {
 
   const rewrite = async () => {
     if (!source.trim()) return;
-    if (!spendCredit("rewriteBullets", "Bullet rewrite")) {
-      setMessage("Credits required. Add credits in Settings to use AI.");
+    if (settings.aiDataConsent !== true) {
+      setMessage(t(language, "ai_consent_required"));
+      return;
+    }
+    if (!spendCredit("rewriteBullets", t(language, "bullets_rewritten_history"))) {
+      setMessage(t(language, "credits_required"));
       return;
     }
     setLoading(true);
@@ -466,8 +662,8 @@ function BulletScreen({ next }: { next: () => void }) {
     });
     const output = result.output;
     setRewritten(output);
-    addHistory({ type: "rewrite", title: "Experience bullets rewritten", detail: output, ...aiHistoryMeta("rewriteBullets", result, source) });
-    setMessage(result.status === "fallback" ? `${result.message} 1 credit used.` : "Bullets rewritten. 1 credit used.");
+    addHistory({ type: "rewrite", title: t(language, "bullets_rewritten_history"), detail: output, ...aiHistoryMeta("rewriteBullets", result, source) });
+    setMessage(result.status === "fallback" ? `${result.message} ${t(language, "credit_used_suffix")}` : t(language, "bullets_rewritten_done"));
     setLoading(false);
   };
 
@@ -483,22 +679,23 @@ function BulletScreen({ next }: { next: () => void }) {
 
   return (
     <Section>
-      <Title title="Bullet Rewriter" subtitle="Turn rough bullets into clear impact." />
-      <Field label="Current bullets" value={source} onChangeText={setSource} multiline placeholder={"Managed reports\nWorked with teams\nImproved process"} />
-      {loading ? <Skeleton lines={4} /> : rewritten ? <Text style={styles.resultText}>{rewritten}</Text> : <EmptyState text="Paste 2-5 bullets and rewrite them for clarity." />}
-      <AiCostHint />
-      {!!message && <Text style={styles.status}>{message}</Text>}
+      <Title title={t(language, "bullets_title")} subtitle={t(language, "bullets_subtitle")} />
+      <Field label={t(language, "current_bullets")} value={source} onChangeText={setSource} multiline placeholder={t(language, "source_bullets_placeholder")} />
+      {loading ? <Skeleton lines={4} /> : rewritten ? <Text style={styles.resultText}>{rewritten}</Text> : <EmptyState text={t(language, "bullets_subtitle")} />}
       <ActionRow>
-        <Button label="Rewrite" onPress={rewrite} loading={loading} />
-        <Button label="Apply" onPress={apply} variant="secondary" disabled={!source.trim() && !rewritten.trim()} />
-        <Button label="Job" onPress={next} variant="ghost" />
+        <Button label={t(language, "rewrite")} onPress={rewrite} loading={loading} />
+        <Button label={t(language, "apply")} onPress={apply} variant="secondary" disabled={!source.trim() && !rewritten.trim()} />
+        <Button label={t(language, "job")} onPress={next} variant="ghost" />
       </ActionRow>
+      {!!message && <Text style={styles.status}>{message}</Text>}
+      <AiCostHint />
     </Section>
   );
 }
 
 function JobScreen({ next }: { next: () => void }) {
   const settings = useAppStore((state) => state.settings);
+  const language = settings.language;
   const apiBaseUrl = useResolvedApiBaseUrl();
   const updateSettings = useAppStore((state) => state.updateSettings);
   const spendCredit = useAppStore((state) => state.spendCredit);
@@ -508,8 +705,12 @@ function JobScreen({ next }: { next: () => void }) {
   const [message, setMessage] = useState("");
 
   const analyze = async () => {
-    if (!spendCredit("analyzeJob", "Job analysis")) {
-      setMessage("Credits required. Add credits in Settings to use AI.");
+    if (settings.aiDataConsent !== true) {
+      setMessage(t(language, "ai_consent_required"));
+      return;
+    }
+    if (!spendCredit("analyzeJob", t(language, "job_analyzed_history"))) {
+      setMessage(t(language, "credits_required"));
       return;
     }
     setLoading(true);
@@ -517,26 +718,26 @@ function JobScreen({ next }: { next: () => void }) {
       task: "analyzeJob",
       apiBaseUrl,
       provider: settings.aiProvider,
-      input: { jobDescription: settings.lastJobDescription }
+      input: { jobDescription: settings.lastJobDescription, tone: settings.tone }
     });
     const output = result.output;
-    setAnalysis(parseLooseJson<JobAnalysis>(output, { title: "Target role", company: "", mustHave: splitLines(output).slice(0, 4), niceToHave: [], keywords: [], risks: [] }));
-    addHistory({ type: "job", title: "Job analyzed", detail: output, ...aiHistoryMeta("analyzeJob", result, settings.lastJobDescription) });
-    setMessage(result.status === "fallback" ? `${result.message} 1 credit used.` : "Job analyzed. 1 credit used.");
+    setAnalysis(parseLooseJson<JobAnalysis>(output, { title: t(language, "target_role"), company: "", mustHave: splitLines(output).slice(0, 4), niceToHave: [], keywords: [], risks: [] }));
+    addHistory({ type: "job", title: t(language, "job_analyzed_history"), detail: output, ...aiHistoryMeta("analyzeJob", result, settings.lastJobDescription) });
+    setMessage(result.status === "fallback" ? `${result.message} ${t(language, "credit_used_suffix")}` : t(language, "job_analyzed_done"));
     setLoading(false);
   };
 
   return (
     <Section>
-      <Title title="Job Description" subtitle="Paste the target role." />
-      <Field label="Job description" value={settings.lastJobDescription} onChangeText={(lastJobDescription) => updateSettings({ lastJobDescription })} multiline placeholder="Paste the role..." />
-      {loading ? <Skeleton /> : analysis ? <InsightList title="Role signals" items={[...analysis.mustHave, ...analysis.keywords].slice(0, 8)} /> : <EmptyState text="Run analysis to extract must-haves and keywords." />}
-      <AiCostHint />
-      {!!message && <Text style={styles.status}>{message}</Text>}
+      <Title title={t(language, "job_title")} subtitle={t(language, "job_subtitle")} />
+      <Field label={t(language, "job_title")} value={settings.lastJobDescription} onChangeText={(lastJobDescription) => updateSettings({ lastJobDescription })} multiline placeholder={t(language, "job_subtitle")} />
+      {loading ? <Skeleton /> : analysis ? <InsightList title={t(language, "role_signals")} items={[...analysis.mustHave, ...analysis.keywords].slice(0, 8)} /> : <EmptyState text={t(language, "run_analysis_empty")} />}
       <ActionRow>
-        <Button label="Analyze" onPress={analyze} loading={loading} />
-        <Button label="Next" onPress={next} variant="secondary" />
+        <Button label={t(language, "analyze")} onPress={analyze} loading={loading} />
+        <Button label={t(language, "next")} onPress={next} variant="secondary" />
       </ActionRow>
+      {!!message && <Text style={styles.status}>{message}</Text>}
+      <AiCostHint />
     </Section>
   );
 }
@@ -544,6 +745,7 @@ function JobScreen({ next }: { next: () => void }) {
 function OptimizeScreen({ next }: { next: () => void }) {
   const cv = useActiveCv();
   const settings = useAppStore((state) => state.settings);
+  const language = settings.language;
   const apiBaseUrl = useResolvedApiBaseUrl();
   const updateCv = useAppStore((state) => state.updateCv);
   const addHistory = useAppStore((state) => state.addHistory);
@@ -555,8 +757,12 @@ function OptimizeScreen({ next }: { next: () => void }) {
   const [message, setMessage] = useState("");
 
   const optimize = async () => {
-    if (!spendCredit("optimizeCv", "CV optimization")) {
-      setMessage("Credits required. Add credits in Settings to use AI.");
+    if (settings.aiDataConsent !== true) {
+      setMessage(t(language, "ai_consent_required"));
+      return;
+    }
+    if (!spendCredit("optimizeCv", t(language, "cv_optimized_history"))) {
+      setMessage(t(language, "credits_required"));
       return;
     }
     setLoading(true);
@@ -571,12 +777,12 @@ function OptimizeScreen({ next }: { next: () => void }) {
       summary: response,
       skills: cv.skills,
       experience: cv.experience,
-      notes: ["AI returned text instead of structured JSON. The text was kept as the optimized summary."]
+      notes: [language === "tr" ? "AI yapılandırılmış veri yerine metin döndürdü. Metin optimize özet olarak korundu." : "AI returned text instead of structured JSON. The text was kept as the optimized summary."]
     });
     setOutput(response);
     setDraft(parsed);
-    addHistory({ type: "optimize", title: "CV optimized", detail: response, ...aiHistoryMeta("optimizeCv", result, cv.name) });
-    setMessage(result.status === "fallback" ? `${result.message} 1 credit used.` : "CV optimized. 1 credit used.");
+    addHistory({ type: "optimize", title: t(language, "cv_optimized_history"), detail: response, ...aiHistoryMeta("optimizeCv", result, cv.name) });
+    setMessage(result.status === "fallback" ? `${result.message} ${t(language, "credit_used_suffix")}` : t(language, "cv_optimized_done"));
     setLoading(false);
   };
 
@@ -589,27 +795,27 @@ function OptimizeScreen({ next }: { next: () => void }) {
       experience: applyScope === "all" || applyScope === "bullets" ? draft.experience?.length ? draft.experience.map((item, index) => ({ ...item, id: item.id || cv.experience[index]?.id || shortId("exp") })) : cv.experience : cv.experience,
       rawText: output || cv.rawText
     });
-    setMessage(`${applyScope} changes applied locally.`);
+    setMessage(tf(language, "changes_applied", { scope: applyScope }));
   };
 
   return (
     <Section>
-      <Title title="Optimization" subtitle="Rewrite for the job without inflating claims." />
-      <Text style={styles.mutedLine}>Keep claims realistic. Do not invent metrics.</Text>
+      <Title title={t(language, "optimization_title")} subtitle={t(language, "optimization_subtitle")} />
+      <Text style={styles.mutedLine}>{t(language, "keep_claims_real")}</Text>
       {loading ? <Skeleton lines={6} /> : draft ? (
         <>
           <OptimizationStats cv={cv} draft={draft} jobDescription={settings.lastJobDescription} />
           <OptimizedPreview draft={draft} />
-          <Segmented options={[{ label: "All", value: "all" }, { label: "Summary", value: "summary" }, { label: "Skills", value: "skills" }, { label: "Bullets", value: "bullets" }]} value={applyScope} onChange={setApplyScope} />
+          <Segmented options={[{ label: t(language, "optimize_all"), value: "all" }, { label: t(language, "optimize_summary"), value: "summary" }, { label: t(language, "optimize_skills"), value: "skills" }, { label: t(language, "optimize_bullets"), value: "bullets" }]} value={applyScope} onChange={setApplyScope} />
         </>
-      ) : <EmptyState text="Generate a job-specific draft when the profile, CV, and job are ready." />}
-      <AiCostHint />
-      {!!message && <Text style={styles.status}>{message}</Text>}
+      ) : <EmptyState text={t(language, "optimize_empty")} />}
       <ActionRow>
-        <Button label="Generate" onPress={optimize} loading={loading} />
-        <Button label="Apply" onPress={apply} variant="secondary" disabled={!draft} />
-        <Button label="Next" onPress={next} variant="ghost" />
+        <Button label={t(language, "generate")} onPress={optimize} loading={loading} />
+        <Button label={t(language, "apply")} onPress={apply} variant="secondary" disabled={!draft} />
+        <Button label={t(language, "next")} onPress={next} variant="ghost" />
       </ActionRow>
+      {!!message && <Text style={styles.status}>{message}</Text>}
+      <AiCostHint />
     </Section>
   );
 }
@@ -617,6 +823,7 @@ function OptimizeScreen({ next }: { next: () => void }) {
 function AtsScreen({ next }: { next: () => void }) {
   const cv = useActiveCv();
   const settings = useAppStore((state) => state.settings);
+  const language = settings.language;
   const apiBaseUrl = useResolvedApiBaseUrl();
   const updateCv = useAppStore((state) => state.updateCv);
   const addHistory = useAppStore((state) => state.addHistory);
@@ -626,8 +833,12 @@ function AtsScreen({ next }: { next: () => void }) {
   const [message, setMessage] = useState("");
 
   const run = async () => {
-    if (!spendCredit("atsCheck", "ATS check")) {
-      setMessage("Credits required. Add credits in Settings to use AI.");
+    if (settings.aiDataConsent !== true) {
+      setMessage(t(language, "ai_consent_required"));
+      return;
+    }
+    if (!spendCredit("atsCheck", t(language, "ats_checked_history"))) {
+      setMessage(t(language, "credits_required"));
       return;
     }
     setLoading(true);
@@ -635,45 +846,45 @@ function AtsScreen({ next }: { next: () => void }) {
       task: "atsCheck",
       apiBaseUrl,
       provider: settings.aiProvider,
-      input: { cv, jobDescription: settings.lastJobDescription }
+      input: { cv, jobDescription: settings.lastJobDescription, tone: settings.tone }
     });
     const output = result.output;
-    const parsed = parseLooseJson<AtsReport>(output, { score: 68, strengths: ["Readable content"], fixes: splitLines(output).slice(0, 4), missingKeywords: [] });
+    const parsed = parseLooseJson<AtsReport>(output, { score: 68, strengths: [language === "tr" ? "Okunabilir içerik" : "Readable content"], fixes: splitLines(output).slice(0, 4), missingKeywords: [] });
     setReport(enrichAtsReport(parsed, cv));
-    addHistory({ type: "ats", title: "ATS checked", detail: output, ...aiHistoryMeta("atsCheck", result, cv.name) });
-    setMessage(result.status === "fallback" ? `${result.message} 1 credit used.` : "ATS check complete. 1 credit used.");
+    addHistory({ type: "ats", title: t(language, "ats_checked_history"), detail: output, ...aiHistoryMeta("atsCheck", result, cv.name) });
+    setMessage(result.status === "fallback" ? `${result.message} ${t(language, "credit_used_suffix")}` : t(language, "ats_check_complete"));
     setLoading(false);
   };
 
   const addMissingKeywords = () => {
     if (!report?.missingKeywords.length) return;
-    const current = new Set(cv.skills.map((skill) => skill.toLocaleLowerCase("tr")));
-    const additions = report.missingKeywords.filter((keyword) => !current.has(keyword.toLocaleLowerCase("tr")));
+    const current = new Set(cv.skills.map((skill) => skill.toLocaleLowerCase(TURKISH_LOCALE)));
+    const additions = report.missingKeywords.filter((keyword) => !current.has(keyword.toLocaleLowerCase(TURKISH_LOCALE)));
     updateCv({ ...cv, skills: [...cv.skills, ...additions] });
-    setMessage(additions.length ? "Missing keywords added to skills." : "Keywords are already in skills.");
-    addHistory({ type: "ats", title: "ATS keywords applied", detail: additions.join(", ") || "No new keywords" });
+    setMessage(additions.length ? t(language, "missing_keywords_added") : t(language, "keywords_already_present"));
+    addHistory({ type: "ats", title: t(language, "ats_keywords_applied_history"), detail: additions.join(", ") || t(language, "keywords_already_present") });
   };
 
   return (
     <Section>
-      <Title title="ATS Check" subtitle="Fast scan for clarity, keywords, and structure." />
+      <Title title={t(language, "ats_title")} subtitle={t(language, "ats_subtitle")} />
       {loading ? <Skeleton lines={4} /> : report ? (
         <View>
           <Text style={styles.score}>{report.score}</Text>
-          <InsightList title="Fix next" items={report.fixes} />
-          <InsightList title="Missing keywords" items={report.missingKeywords} />
-          <InsightList title="Formatting issues" items={report.formattingIssues ?? []} />
-          <InsightList title="Risky phrases" items={report.riskyPhrases ?? []} />
-          <InsightList title="Action items" items={report.actionItems ?? []} />
+          <InsightList title={t(language, "fit_next")} items={report.fixes} />
+          <InsightList title={t(language, "missing_keywords")} items={report.missingKeywords} />
+          <InsightList title={t(language, "formatting_issues")} items={report.formattingIssues ?? []} />
+          <InsightList title={t(language, "risky_phrases")} items={report.riskyPhrases ?? []} />
+          <InsightList title={t(language, "action_items")} items={report.actionItems ?? []} />
         </View>
-      ) : <EmptyState text="Run the ATS check after optimization." />}
-      <AiCostHint />
-      {!!message && <Text style={styles.status}>{message}</Text>}
+      ) : <EmptyState text={t(language, "ats_empty")} />}
       <ActionRow>
-        <Button label="Scan" onPress={run} loading={loading} />
-        <Button label="Add terms" onPress={addMissingKeywords} variant="secondary" disabled={!report?.missingKeywords.length} />
-        <Button label="Next" onPress={next} variant="secondary" />
+        <Button label={t(language, "scan")} onPress={run} loading={loading} />
+        <Button label={t(language, "add_terms")} onPress={addMissingKeywords} variant="secondary" disabled={!report?.missingKeywords.length} />
+        <Button label={t(language, "next")} onPress={next} variant="secondary" />
       </ActionRow>
+      {!!message && <Text style={styles.status}>{message}</Text>}
+      <AiCostHint />
     </Section>
   );
 }
@@ -682,93 +893,88 @@ function ExportScreen({ next }: { next: () => void }) {
   const cv = useActiveCv();
   const profile = useAppStore((state) => state.profile);
   const state = useAppStore();
+  const language = useAppStore((item) => item.settings.language);
   const updateCv = useAppStore((item) => item.updateCv);
   const addHistory = useAppStore((item) => item.addHistory);
   const [message, setMessage] = useState("");
-  const [textPreviewOpen, setTextPreviewOpen] = useState(false);
-
   const templateOptions = useMemo(
-    () => Object.entries(templates).map(([value, item]) => ({ value: value as TemplateId, label: item.label })),
-    []
+    () =>
+      cv.mode === "ats"
+        ? [
+            { value: "ats-compact" as TemplateId, label: t(language, "template_ats_compact") },
+            { value: "ats-balanced" as TemplateId, label: t(language, "template_ats_balanced") },
+            { value: "ats-spacious" as TemplateId, label: t(language, "template_ats_spacious") }
+          ]
+        : [{ value: "human-focus" as TemplateId, label: t(language, "template_human_focus") }],
+    [cv.mode, language]
   );
   const orderOptions = useMemo(
     () => [
-      { label: "Standard", value: "summary,skills,experience,education" },
-      { label: "Experience first", value: "summary,experience,skills,education" },
-      { label: "Skills first", value: "summary,skills,education,experience" }
+      { label: t(language, "standard"), value: "summary,skills,experience,education" },
+      { label: t(language, "experience_first"), value: "summary,experience,skills,education" },
+      { label: t(language, "skills_first"), value: "summary,skills,education,experience" }
     ],
-    []
+    [language]
   );
   const spacingOptions = useMemo(
     () => [
-      { label: "Compact", value: "ats-compact" as TemplateId },
-      { label: "Balanced", value: "ats-balanced" as TemplateId },
-      { label: "Spacious", value: "ats-spacious" as TemplateId }
+      { label: t(language, "compact"), value: "compact" as SpacingId },
+      { label: t(language, "balanced"), value: "balanced" as SpacingId },
+      { label: t(language, "spacious"), value: "spacious" as SpacingId }
     ],
-    []
+    [language]
   );
   const warnings = getExportWarnings(profile, cv);
-  const textPreview = previewTextExport(profile, cv);
-
-  const exportAndLog = async (kind: "pdf" | "text" | "json") => {
-    const msg = kind === "pdf" ? await exportPdf(profile, cv) : kind === "text" ? await exportText(profile, cv) : await exportJson(state);
+  const exportAndLog = async (kind: "pdf" | "text") => {
+    const msg = kind === "pdf" ? await exportPdf(profile, cv) : await exportText(profile, cv);
     setMessage(msg);
-    addHistory({ type: "export", title: `${kind.toUpperCase()} export`, detail: msg });
+    addHistory({ type: "export", title: `${kind.toLocaleUpperCase("en-US")} export`, detail: msg });
   };
 
   return (
     <Section>
-      <Title title="Export" subtitle="Pick a mode, check the preview, export fast." />
-      <Segmented<CvMode> options={[{ label: "ATS Mode", value: "ats" }, { label: "Human Mode", value: "human" }]} value={cv.mode} onChange={(mode) => updateCv({ ...cv, mode, templateId: mode === "ats" ? "ats-balanced" : "human-focus" })} />
+      <Title title={t(language, "export_title")} subtitle={t(language, "export_subtitle")} />
+      <Segmented<CvMode> options={[{ label: t(language, "ats_mode"), value: "ats" }, { label: t(language, "human_mode"), value: "human" }]} value={cv.mode} onChange={(mode) => updateCv({ ...cv, mode, templateId: mode === "ats" ? "ats-balanced" : "human-focus" })} />
+      <Text style={styles.mutedLine}>{t(language, "ats_help")}</Text>
       <View style={{ height: 12 }} />
-      <Text style={styles.subheadCompact}>Template</Text>
+      <Text style={styles.subheadCompact}>{t(language, "template_title")}</Text>
       <ChoiceRail<TemplateId> options={templateOptions} value={cv.templateId} onChange={(templateId) => updateCv({ ...cv, templateId })} />
-      {cv.mode === "ats" ? (
-        <>
-          <Text style={styles.subheadCompact}>Spacing</Text>
-          <ChoiceRail<TemplateId> options={spacingOptions} value={cv.templateId} onChange={(templateId) => updateCv({ ...cv, templateId })} />
-        </>
-      ) : null}
-      <Text style={styles.subheadCompact}>Order</Text>
+      <Text style={styles.subheadCompact}>{t(language, "spacing_title")}</Text>
+      <ChoiceRail<SpacingId> options={spacingOptions} value={cv.spacingId} onChange={(spacingId) => updateCv({ ...cv, spacingId })} />
+      {cv.mode === "ats" ? <SpacingPreview spacingId={cv.spacingId} /> : null}
+      <Text style={styles.subheadCompact}>{t(language, "order_title")}</Text>
       <ChoiceRail options={orderOptions} value={cv.sectionOrder.join(",")} onChange={(value) => updateCv({ ...cv, sectionOrder: value.split(",") as CvSectionId[] })} />
       <ExportWarnings warnings={warnings} />
       <CvPreview profile={profile} cv={cv} />
-      {textPreviewOpen ? (
-        <View style={styles.textPreviewBox}>
-          <Text style={styles.previewLabel}>Text preview</Text>
-          <Text style={styles.textPreviewText}>{textPreview}</Text>
-        </View>
-      ) : null}
-      {!!message && <Text style={styles.status}>{message}</Text>}
       <ActionRow>
-        <Button label="PDF" onPress={() => exportAndLog("pdf")} />
-        <Button label="Text" onPress={() => exportAndLog("text")} variant="secondary" />
-        <Button label="JSON" onPress={() => exportAndLog("json")} variant="ghost" />
-        <Button label={textPreviewOpen ? "Hide text" : "Show text"} onPress={() => setTextPreviewOpen((value) => !value)} variant="ghost" />
-        <Button label="Copy" onPress={async () => setMessage(await copyTextExport(profile, cv))} variant="ghost" />
+        <Button label={t(language, "pdf")} onPress={() => exportAndLog("pdf")} />
+        <Button label={t(language, "text")} onPress={() => exportAndLog("text")} variant="secondary" />
+        <Button label={t(language, "copy")} onPress={async () => setMessage(await copyTextExport(profile, cv))} variant="ghost" />
       </ActionRow>
       <ActionRow>
-        <Button label="Prep" onPress={next} variant="secondary" />
+        <Button label={t(language, "prep")} onPress={next} variant="secondary" />
       </ActionRow>
     </Section>
   );
 }
 
 function getExportWarnings(profile: Profile, cv: Cv) {
+  const language = useAppStore.getState().settings.language;
   return [
-    !profile.fullName ? "Name is missing." : "",
-    !profile.email && !profile.phone ? "Add at least one contact method." : "",
-    !cv.summary && !profile.summary ? "Summary is missing." : "",
-    !cv.skills.length ? "Skills are missing." : "",
-    !cv.experience.length || cv.experience.every((item) => !item.bullets.length) ? "Experience bullets are missing." : ""
+    !profile.fullName ? (language === "tr" ? "Ad eksik." : "Name is missing.") : "",
+    !profile.email && !profile.phone ? (language === "tr" ? "En az bir iletişim yöntemi ekleyin." : "Add at least one contact method.") : "",
+    !cv.summary && !profile.summary ? (language === "tr" ? "Özet eksik." : "Summary is missing.") : "",
+    !cv.skills.length ? (language === "tr" ? "Yetenekler eksik." : "Skills are missing.") : "",
+    !cv.experience.length || cv.experience.every((item) => !item.bullets.length) ? (language === "tr" ? "Deneyim maddeleri eksik." : "Experience bullets are missing.") : ""
   ].filter(Boolean);
 }
 
 function ExportWarnings({ warnings }: { warnings: string[] }) {
-  if (!warnings.length) return <Text style={styles.readyLine}>Preview looks ready to export.</Text>;
+  const language = useAppStore((state) => state.settings.language);
+  if (!warnings.length) return <Text style={styles.readyLine}>{t(language, "ready_export")}</Text>;
   return (
     <View style={styles.warningBox}>
-      <Text style={styles.warningTitle}>Before export</Text>
+      <Text style={styles.warningTitle}>{t(language, "before_export")}</Text>
       {warnings.map((warning) => <Text key={warning} style={styles.warningText}>- {warning}</Text>)}
     </View>
   );
@@ -777,62 +983,141 @@ function ExportWarnings({ warnings }: { warnings: string[] }) {
 function CvPreview({ profile, cv }: { profile: Profile; cv: Cv }) {
   const template = templates[cv.templateId];
   const human = template.mode === "human";
+  const language = useAppStore((state) => state.settings.language);
   const contact = [profile.email, profile.phone, profile.location, profile.links].filter(Boolean).join(" | ");
+  const spacing = getSpacingValue(cv.spacingId);
+  const bodyLineHeight = human ? spacing + 15 : spacing + 11;
+  const bodyFontSize = human ? 15 : 14;
 
   return (
-    <View style={[styles.cvPaper, styles.cvPaperCompact, human && styles.cvPaperHuman]}>
-      <View style={[styles.cvHeader, human && styles.cvHeaderHuman]}>
-        <Text style={styles.cvName}>{profile.fullName || "Your Name"}</Text>
-        {!!profile.title && <Text style={styles.cvTitle}>{profile.title}</Text>}
-        {!!contact && <Text style={styles.cvMeta}>{contact}</Text>}
+    <View style={[styles.cvPaper, styles.cvPaperCompact, human && styles.cvPaperHuman, human && { padding: spacing + 10 }]}>
+      <View style={[styles.modeBadge, human && styles.modeBadgeHuman]}>
+        <Text style={[styles.modeBadgeText, human && styles.modeBadgeTextHuman]}>
+          {human ? (language === "tr" ? "İnsan Modu" : "Human Mode") : (language === "tr" ? "ATS Modu" : "ATS Mode")}
+        </Text>
       </View>
-      {cv.sectionOrder.map((section) => <CvPreviewContent key={section} section={section} profile={profile} cv={cv} human={human} />)}
+      <View style={[styles.cvHeader, human && styles.cvHeaderHuman, { paddingBottom: spacing + 4, marginBottom: Math.max(8, spacing) }]}>
+        <Text style={[styles.cvName, human && { fontSize: 28 }]}>{profile.fullName || t(language, "your_name")}</Text>
+        {!!profile.title && <Text style={[styles.cvTitle, human && { fontSize: 16, marginTop: 6 }]}>{profile.title}</Text>}
+        {!!contact && <Text style={[styles.cvMeta, human && { fontSize: 12.5, lineHeight: 20, marginTop: 5 }]}>{contact}</Text>}
+      </View>
+      {cv.sectionOrder.map((section) => (
+        <CvPreviewContent
+          key={section}
+          section={section}
+          profile={profile}
+          cv={cv}
+          human={human}
+          bodyFontSize={bodyFontSize}
+          bodyLineHeight={bodyLineHeight}
+        />
+      ))}
     </View>
   );
 }
 
-function CvPreviewContent({ section, profile, cv, human }: { section: CvSectionId; profile: Profile; cv: Cv; human: boolean }) {
+function CvPreviewContent({
+  section,
+  profile,
+  cv,
+  human,
+  bodyFontSize,
+  bodyLineHeight
+}: {
+  section: CvSectionId;
+  profile: Profile;
+  cv: Cv;
+  human: boolean;
+  bodyFontSize: number;
+  bodyLineHeight: number;
+}) {
+  const language = useAppStore((state) => state.settings.language);
+  const spacing = getSpacingValue(cv.spacingId);
+  const bodyStyle = [styles.cvBody, { fontSize: bodyFontSize, lineHeight: bodyLineHeight }];
   if (section === "summary") {
-    return <CvPreviewSection title="Summary"><Text style={styles.cvBody}>{cv.summary || profile.summary || "Add a focused summary before export."}</Text></CvPreviewSection>;
+    return <CvPreviewSection title={t(language, "summary_section")} spacing={spacing} human={human}><Text style={bodyStyle}>{cv.summary || profile.summary || t(language, "add_summary_before_export")}</Text></CvPreviewSection>;
   }
   if (section === "skills") {
     return (
-      <CvPreviewSection title="Skills">
-        <View style={human ? styles.skillWrap : undefined}>
+      <CvPreviewSection title={t(language, "skills_section")} spacing={spacing} human={human}>
+        <View style={human ? [styles.skillWrap, { gap: Math.max(6, spacing - 2) }] : undefined}>
           {cv.skills.length ? cv.skills.map((skill) => (
-            <Text key={skill} style={human ? styles.skillPill : styles.cvBody}>{human ? skill : `- ${skill}`}</Text>
-          )) : <Text style={styles.cvBody}>Add role-relevant skills.</Text>}
+            <Text key={skill} style={human ? [styles.skillPill, { paddingHorizontal: spacing, paddingVertical: Math.max(5, spacing - 1), fontSize: 13.5 }] : bodyStyle}>{human ? skill : `- ${skill}`}</Text>
+          )) : <Text style={bodyStyle}>{t(language, "add_role_skills")}</Text>}
         </View>
       </CvPreviewSection>
     );
   }
   if (section === "experience") {
     return (
-      <CvPreviewSection title="Experience">
+      <CvPreviewSection title={t(language, "experience_section")} spacing={spacing} human={human}>
         {cv.experience.length ? cv.experience.map((item) => (
-          <View key={item.id} style={styles.cvExperience}>
-            <Text style={styles.cvRole}>{[item.role, item.company].filter(Boolean).join(" | ") || "Experience"}</Text>
-            {!!item.period && <Text style={styles.cvMeta}>{item.period}</Text>}
-            {item.bullets.map((bullet) => <Text key={bullet} style={styles.cvBody}>- {bullet}</Text>)}
+          <View key={item.id} style={[styles.cvExperience, { marginBottom: spacing }]}>
+            {[item.role, item.company].filter(Boolean).length ? (
+              <Text style={[styles.cvRole, human && { fontSize: 15, marginBottom: 4 }]}>{[item.role, item.company].filter(Boolean).join(" | ")}</Text>
+            ) : null}
+            {!!item.period && <Text style={[styles.cvMeta, { marginBottom: Math.max(4, spacing - 2) }]}>{item.period}</Text>}
+            {item.bullets.map((bullet) => <Text key={bullet} style={bodyStyle}>- {bullet}</Text>)}
           </View>
-        )) : <Text style={styles.cvBody}>Add recent experience bullets.</Text>}
+        )) : <Text style={bodyStyle}>{t(language, "add_recent_bullets")}</Text>}
       </CvPreviewSection>
     );
   }
   return (
-    <CvPreviewSection title="Education">
+    <CvPreviewSection title={t(language, "education_section")} spacing={spacing} human={human}>
       {cv.education.length ? cv.education.map((item) => (
-        <Text key={item.id} style={styles.cvBody}>{[item.degree, item.school, item.period].filter(Boolean).join(", ")}</Text>
-      )) : <Text style={styles.cvBody}>Education can stay empty if it is not relevant.</Text>}
+        <Text key={item.id} style={bodyStyle}>{[item.degree, item.school, item.period].filter(Boolean).join(", ")}</Text>
+      )) : <Text style={bodyStyle}>{t(language, "education_optional")}</Text>}
     </CvPreviewSection>
   );
 }
 
-function CvPreviewSection({ title, children }: { title: string; children: React.ReactNode }) {
+function CvPreviewSection({ title, spacing, human, children }: { title: string; spacing: number; human: boolean; children: React.ReactNode }) {
   return (
-    <View style={styles.cvSection}>
-      <Text style={styles.cvSectionTitle}>{title}</Text>
+    <View style={[styles.cvSection, { paddingTop: Math.max(10, spacing + 2) }]}>
+      <Text style={[styles.cvSectionTitle, human && { fontSize: 11.5, color: colors.accent }, { marginBottom: Math.max(6, spacing - 2) }]}>{title}</Text>
       {children}
+    </View>
+  );
+}
+
+function getSpacingValue(spacingId: SpacingId) {
+  if (spacingId === "compact") return 6;
+  if (spacingId === "spacious") return 14;
+  return 10;
+}
+
+function SpacingPreview({ spacingId }: { spacingId: SpacingId }) {
+  const language = useAppStore((state) => state.settings.language);
+  const selectedIndex = spacingId === "compact" ? 0 : spacingId === "balanced" ? 1 : 2;
+  return (
+    <View style={styles.spacingPreview}>
+      <Text style={styles.previewLabel}>{language === "tr" ? "Bo?luk ?nizlemesi" : "Spacing preview"}</Text>
+      <View style={styles.spacingPreviewRow}>
+        {(["compact", "balanced", "spacious"] as SpacingId[]).map((item, index) => {
+          const gap = item === "compact" ? 4 : item === "spacious" ? 10 : 7;
+          const active = index === selectedIndex;
+          return (
+            <View key={item} style={[styles.spacingPreviewCard, active && styles.spacingPreviewCardActive]}>
+              <View style={styles.spacingPreviewLineLg} />
+              <View style={[styles.spacingPreviewStack, { gap }]}>
+                <View style={styles.spacingPreviewLineSm} />
+                <View style={styles.spacingPreviewLineSm} />
+                <View style={[styles.spacingPreviewLineSm, styles.spacingPreviewLineShort]} />
+              </View>
+              <Text style={[styles.spacingPreviewCaption, active && styles.spacingPreviewCaptionActive]}>
+                {language === "tr"
+                  ? item === "compact"
+                    ? "S?k?"
+                    : item === "balanced"
+                      ? "Dengeli"
+                      : "Ferah"
+                  : item}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -840,6 +1125,7 @@ function CvPreviewSection({ title, children }: { title: string; children: React.
 function InterviewScreen() {
   const cv = useActiveCv();
   const settings = useAppStore((state) => state.settings);
+  const language = settings.language;
   const apiBaseUrl = useResolvedApiBaseUrl();
   const spendCredit = useAppStore((state) => state.spendCredit);
   const addHistory = useAppStore((state) => state.addHistory);
@@ -853,8 +1139,12 @@ function InterviewScreen() {
   const [starResult, setStarResult] = useState("");
 
   const generate = async () => {
-    if (!spendCredit("interviewQuestions", "Interview question generation")) {
-      setMessage("Credits required. Add credits in Settings to use AI.");
+    if (settings.aiDataConsent !== true) {
+      setMessage(t(language, "ai_consent_required"));
+      return;
+    }
+    if (!spendCredit("interviewQuestions", t(language, "interview_pack_history"))) {
+      setMessage(t(language, "credits_required"));
       return;
     }
     setLoading(true);
@@ -862,7 +1152,7 @@ function InterviewScreen() {
       task: "interviewQuestions",
       apiBaseUrl,
       provider: settings.aiProvider,
-      input: { cv, jobDescription: settings.lastJobDescription }
+      input: { cv, jobDescription: settings.lastJobDescription, tone: settings.tone }
     });
     const questions = questionResult.output;
     const parsedQuestions = parseLooseJson<{ categories: InterviewCategory[] }>(questions, {
@@ -873,7 +1163,7 @@ function InterviewScreen() {
       task: "interviewAnswers",
       apiBaseUrl,
       provider: settings.aiProvider,
-      input: { questions: flatQuestions, cv, jobDescription: settings.lastJobDescription }
+      input: { questions: flatQuestions, cv, jobDescription: settings.lastJobDescription, tone: settings.tone }
     });
     const answers = answerResult.output;
     const answerLines = splitLines(answers);
@@ -884,15 +1174,19 @@ function InterviewScreen() {
     }));
     setPack({ categories: parsedQuestions.categories, answers: answerLines, qaPairs });
     setSelectedPair(0);
-    addHistory({ type: "interview", title: "Interview pack", detail: `${questions}\n\n${answers}`, ...aiHistoryMeta("interviewQuestions", questionResult, cv.name) });
-    setMessage(questionResult.status === "fallback" || answerResult.status === "fallback" ? "Interview prep used a safe fallback. 1 credit used." : "Interview prep generated. 1 credit used.");
+    addHistory({ type: "interview", title: t(language, "interview_pack_history"), detail: `${questions}\n\n${answers}`, ...aiHistoryMeta("interviewQuestions", questionResult, cv.name) });
+    setMessage(questionResult.status === "fallback" || answerResult.status === "fallback" ? t(language, "interview_prep_fallback") : t(language, "interview_prep_generated"));
     setLoading(false);
   };
 
   const improveAnswer = async () => {
     if (!pack?.qaPairs?.length) return;
-    if (!spendCredit("interviewAnswers", "Interview answer improvement")) {
-      setMessage("Credits required. Add credits in Settings to use AI.");
+    if (settings.aiDataConsent !== true) {
+      setMessage(t(language, "ai_consent_required"));
+      return;
+    }
+    if (!spendCredit("interviewAnswers", t(language, "interview_answer_improved_history"))) {
+      setMessage(t(language, "credits_required"));
       return;
     }
     setLoading(true);
@@ -907,55 +1201,57 @@ function InterviewScreen() {
         currentAnswer: pair.answer,
         starDraft,
         cv,
-        jobDescription: settings.lastJobDescription
+        jobDescription: settings.lastJobDescription,
+        tone: settings.tone
       }
     });
     const improved = splitLines(result.output)[0] ?? result.output;
     const qaPairs = pack.qaPairs.map((item, index) => (index === selectedPair ? { ...item, answer: improved } : item));
     setPack({ ...pack, qaPairs, answers: qaPairs.map((item) => item.answer) });
-    setMessage(result.status === "fallback" ? `${result.message} 1 credit used.` : "Answer improved. 1 credit used.");
-    addHistory({ type: "interview", title: "Interview answer improved", detail: improved, ...aiHistoryMeta("interviewAnswers", result, pair.question) });
+    setMessage(result.status === "fallback" ? `${result.message} ${t(language, "credit_used_suffix")}` : t(language, "answer_improved"));
+    addHistory({ type: "interview", title: t(language, "interview_answer_improved_history"), detail: improved, ...aiHistoryMeta("interviewAnswers", result, pair.question) });
     setLoading(false);
   };
 
   return (
     <Section>
-      <Title title="Interview Prep" subtitle="Generate questions and tighten answers." />
+      <Title title={t(language, "interview_title")} subtitle={t(language, "interview_subtitle")} />
       {loading ? <Skeleton lines={6} /> : pack ? (
         <>
-          {pack.categories.map((category) => <InsightList key={category.title} title={category.title} items={category.items} />)}
+          {pack.categories.map((category) => <InsightList key={category.title} title={localizeInterviewCategory(category.title, language)} items={category.items} />)}
           {pack.qaPairs?.length ? (
             <>
-              <Text style={styles.subheadCompact}>Answer pair</Text>
+              <Text style={styles.subheadCompact}>{t(language, "answer_pair")}</Text>
               <ChoiceRail options={pack.qaPairs.map((pair, index) => ({ label: `${index + 1}`, value: String(index) }))} value={String(selectedPair)} onChange={(value) => setSelectedPair(Number(value))} />
               <InterviewAnswerCard pair={pack.qaPairs[selectedPair]} />
-              <Text style={styles.subheadCompact}>STAR notes</Text>
-              <Field label="Situation" value={starSituation} onChangeText={setStarSituation} multiline placeholder="What was happening?" />
-              <Field label="Task" value={starTask} onChangeText={setStarTask} multiline placeholder="What were you owning?" />
-              <Field label="Action" value={starAction} onChangeText={setStarAction} multiline placeholder="What did you do?" />
-              <Field label="Result" value={starResult} onChangeText={setStarResult} multiline placeholder="What changed?" />
+              <Text style={styles.subheadCompact}>{t(language, "star_notes")}</Text>
+              <Field label={t(language, "situation")} value={starSituation} onChangeText={setStarSituation} multiline placeholder={t(language, "star_situation_placeholder")} />
+              <Field label={t(language, "task")} value={starTask} onChangeText={setStarTask} multiline placeholder={t(language, "star_task_placeholder")} />
+              <Field label={t(language, "action")} value={starAction} onChangeText={setStarAction} multiline placeholder={t(language, "star_action_placeholder")} />
+              <Field label={t(language, "result")} value={starResult} onChangeText={setStarResult} multiline placeholder={t(language, "star_result_placeholder")} />
               <ActionRow>
-                <Button label="Improve" onPress={improveAnswer} variant="secondary" />
-                <Button label="Copy" onPress={() => copyText(pack.qaPairs?.[selectedPair]?.answer || "").then(setMessage)} variant="ghost" />
+                <Button label={t(language, "improve")} onPress={improveAnswer} variant="secondary" />
+                <Button label={t(language, "copy")} onPress={() => copyText(pack.qaPairs?.[selectedPair]?.answer || "").then(setMessage)} variant="ghost" />
               </ActionRow>
             </>
-          ) : <InsightList title="Answer starters" items={pack.answers} />}
+          ) : <InsightList title={t(language, "answer_starters")} items={pack.answers} />}
         </>
-      ) : <EmptyState text="Create prep from the optimized CV and job description." />}
-      <AiCostHint />
-      {!!message && <Text style={styles.status}>{message}</Text>}
+      ) : <EmptyState text={t(language, "interview_empty")} />}
       <ActionRow>
-        <Button label="Generate" onPress={generate} loading={loading} />
+        <Button label={t(language, "generate")} onPress={generate} loading={loading} />
       </ActionRow>
+      {!!message && <Text style={styles.status}>{message}</Text>}
+      <AiCostHint />
     </Section>
   );
 }
 
 function InterviewAnswerCard({ pair }: { pair?: { category: InterviewCategory["title"]; question: string; answer: string } }) {
+  const language = useAppStore((state) => state.settings.language);
   if (!pair) return null;
   return (
     <View style={[styles.answerCard, styles.answerCardCompact]}>
-      <Text style={styles.previewLabel}>{pair.category}</Text>
+      <Text style={styles.previewLabel}>{localizeInterviewCategory(pair.category, language)}</Text>
       <Text style={styles.historyTitle}>{pair.question}</Text>
       <Text style={styles.previewText}>{pair.answer}</Text>
     </View>
@@ -970,12 +1266,19 @@ function categorizeQuestions(questions: string[]): InterviewCategory[] {
   ].filter((category) => category.items.length > 0) as InterviewCategory[];
 }
 
+function localizeInterviewCategory(category: InterviewCategory["title"], language: AppLanguage) {
+  if (category === "Behavioral") return t(language, "behavioral");
+  if (category === "Technical") return t(language, "technical_cat");
+  return t(language, "role_fit");
+}
+
 function AiCostHint() {
   const credits = useAppStore((state) => state.settings.credits);
+  const language = useAppStore((state) => state.settings.language);
   return (
     <View style={[styles.costHint, credits <= 0 && styles.costHintEmpty]}>
       <Text style={[styles.costHintText, credits <= 0 && styles.costHintTextEmpty]}>
-        {credits > 0 ? "AI action uses 1 credit." : "No credits left. Add credits in Settings."}
+        {credits > 0 ? t(language, "cost_hint") : t(language, "cost_hint_empty")}
       </Text>
     </View>
   );
@@ -993,51 +1296,53 @@ function aiHistoryMeta(task: AiTask, result: AiResult, input: string) {
 }
 
 function buildStarDraft(situation: string, task: string, action: string, result: string) {
+  const language = useAppStore.getState().settings.language;
   return [
-    situation ? `Situation: ${situation}` : "",
-    task ? `Task: ${task}` : "",
-    action ? `Action: ${action}` : "",
-    result ? `Result: ${result}` : ""
+    situation ? `${language === "tr" ? "Durum" : "Situation"}: ${situation}` : "",
+    task ? `${language === "tr" ? "Görev" : "Task"}: ${task}` : "",
+    action ? `${language === "tr" ? "Aksiyon" : "Action"}: ${action}` : "",
+    result ? `${language === "tr" ? "Sonuç" : "Result"}: ${result}` : ""
   ].filter(Boolean).join("\n");
 }
 
 async function copyText(value: string) {
+  const language = useAppStore.getState().settings.language;
   await Clipboard.setStringAsync(value);
-  return "Copied.";
+  return t(language, "copied");
 }
 
 function HistoryScreen() {
   const history = useAppStore((state) => state.history);
+  const language = useAppStore((state) => state.settings.language);
   const [filter, setFilter] = useState<"all" | "optimize" | "ats" | "interview" | "export">("all");
   const filteredHistory = filter === "all" ? history : history.filter((item) => item.type === filter);
   return (
     <Section>
-      <Title title="History" subtitle="Recent local actions. Stays on this device." />
+      <Title title={t(language, "history_title")} subtitle={t(language, "history_subtitle")} />
       <ChoiceRail
         value={filter}
         onChange={setFilter}
         options={[
-          { label: "All", value: "all" },
-          { label: "Draft", value: "optimize" },
+          { label: t(language, "history_export"), value: "export" },
+          { label: t(language, "draft"), value: "optimize" },
           { label: "ATS", value: "ats" },
-          { label: "Prep", value: "interview" },
-          { label: "Export", value: "export" }
+          { label: t(language, "history_prep"), value: "interview" },
+          { label: t(language, "all"), value: "all" }
         ]}
       />
       {filteredHistory.length ? filteredHistory.map((item) => (
         <View key={item.id} style={styles.historyRowCompact}>
           <Text style={styles.historyTitle}>{item.title}</Text>
-          <Text style={styles.historyMeta}>{new Date(item.createdAt).toLocaleString()}</Text>
+          <Text style={styles.historyMeta}>{formatDateTime(language, item.createdAt)}</Text>
           <Text numberOfLines={2} style={styles.historyDetail}>{item.detail}</Text>
         </View>
-      )) : <EmptyState text="No matching history yet." />}
+      )) : <EmptyState text={t(language, "no_matching_history")} />}
     </Section>
   );
 }
 
 function SettingsScreen() {
   const settings = useAppStore((state) => state.settings);
-  const apiBaseUrl = useResolvedApiBaseUrl();
   const creditTransactions = useAppStore((state) => state.creditTransactions);
   const updateSettings = useAppStore((state) => state.updateSettings);
   const restoreCredits = useAppStore((state) => state.restoreCredits);
@@ -1046,17 +1351,17 @@ function SettingsScreen() {
   const resetLocalData = useAppStore((state) => state.resetLocalData);
   const [backupMode, setBackupMode] = useState<"merge" | "replace">("merge");
   const [message, setMessage] = useState("");
-  const developerMode = isDeveloperBuild();
+  const [confirmBackupImport, setConfirmBackupImport] = useState(false);
 
   const buy = async (productId: ProductId) => {
     const result = await purchaseCredits(productId);
-    if (result.ok) restoreCredits(settings.credits + result.credits, "purchase", `Purchased ${result.credits} credits`);
+    if (result.ok) restoreCredits(settings.credits + result.credits, "purchase", tf(settings.language, "purchase_note", { credits: result.credits }));
     setMessage(result.message);
   };
 
   const restore = async () => {
     const result = await restorePurchases();
-    if (result.ok) restoreCredits(result.credits, "restore", `Restored ${result.credits} credits`);
+    if (result.ok) restoreCredits(result.credits, "restore", tf(settings.language, "restore_note", { credits: result.credits }));
     setMessage(result.message);
   };
 
@@ -1067,82 +1372,138 @@ function SettingsScreen() {
       importLocalData(data, backupMode);
       const cvCount = data.cvs?.length ?? 0;
       const historyCount = data.history?.length ?? 0;
-      setMessage(`Backup ${backupMode} complete. ${cvCount} CVs, ${historyCount} history items.`);
+      setMessage(tf(settings.language, "backup_complete", { mode: backupMode, cvCount, historyCount }));
+      setConfirmBackupImport(false);
     } catch {
-      setMessage("Could not import this backup file.");
+      setMessage(t(settings.language, "backup_import_failed"));
+      setConfirmBackupImport(false);
     }
   };
 
-  const testProvider = async () => {
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/provider-test`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-        body: JSON.stringify({ provider: settings.aiProvider })
-      });
-      const data = (await response.json()) as { ok?: boolean; provider?: string; model?: string; error?: string };
-      setMessage(data.ok ? `${data.provider} connected with ${data.model}.` : data.error || "Provider test failed.");
-    } catch {
-      setMessage("Could not reach the API server.");
-    }
-  };
-
-  const developerStatus = embeddedStatus(apiBaseUrl, settings.apiBaseUrl);
+  const language = settings.language;
 
   return (
     <Section>
-      <Title title="Settings" subtitle={developerMode ? "Backups, credits, and developer tools." : "Backups and credits."} />
-      {developerMode ? (
-        <>
-          <Text style={styles.subheadCompact}>Developer</Text>
-          <Field label="API URL" value={settings.apiBaseUrl} onChangeText={(apiBaseUrl) => updateSettings({ apiBaseUrl })} />
-          <Text style={styles.mutedLine}>{developerStatus}</Text>
-          <Text style={styles.subheadCompact}>Provider</Text>
-          <Segmented options={[{ label: "Groq", value: "groq" }, { label: "OpenAI", value: "openai" }]} value={settings.aiProvider} onChange={(aiProvider) => updateSettings({ aiProvider })} />
-          <View style={{ height: 12 }} />
-        </>
-      ) : null}
-      <Text style={styles.subheadCompact}>Tone</Text>
-      <Segmented options={[{ label: "Direct", value: "direct" }, { label: "Executive", value: "executive" }, { label: "Technical", value: "technical" }]} value={settings.tone} onChange={(tone) => updateSettings({ tone })} />
-      <Text style={styles.subheadCompact}>Backup</Text>
-      <Segmented options={[{ label: "Merge", value: "merge" }, { label: "Replace", value: "replace" }]} value={backupMode} onChange={setBackupMode} />
-      <Text style={styles.subheadCompact}>Credits</Text>
-      <Text style={styles.mutedLine}>Balance: {settings.credits}. Standard AI action: 1 credit.</Text>
+      <Title title={t(language, "settings_title")} subtitle={t(language, "settings_subtitle")} />
+      <Text style={styles.subheadCompact}>{t(language, "tone_title")}</Text>
+      <Segmented options={[{ label: t(language, "direct"), value: "direct" }, { label: t(language, "executive"), value: "executive" }, { label: t(language, "technical"), value: "technical" }]} value={settings.tone} onChange={(tone) => updateSettings({ tone })} />
+      <Text style={styles.mutedLine}>{t(language, "tone_help")}</Text>
+      <View style={styles.tonePreviewBox}>
+        <Text style={styles.previewLabel}>{language === "tr" ? "Canl? ton ?nizlemesi" : "Live tone preview"}</Text>
+        {getTonePreview(settings.tone, language).map((line) => (
+          <Text key={line} style={styles.tonePreviewText}>- {line}</Text>
+        ))}
+      </View>
+      <Text style={styles.subheadCompact}>{t(language, "ai_consent_title")}</Text>
+      <Segmented options={[{ label: t(language, "ai_consent_allow"), value: "on" }, { label: t(language, "ai_consent_deny"), value: "off" }]} value={settings.aiDataConsent === true ? "on" : "off"} onChange={(value) => updateSettings({ aiDataConsent: value === "on" })} />
+      <Text style={styles.mutedLine}>{settings.aiDataConsent ? t(language, "ai_consent_on") : t(language, "ai_consent_off")}</Text>
+      <Text style={styles.mutedLine}>{t(language, "ai_consent_detail")}</Text>
+      <Text style={styles.subheadCompact}>{t(language, "subscription_info_title")}</Text>
+      <Text style={styles.mutedLine}>{t(language, "subscription_info_body")}</Text>
+      <Text style={styles.mutedLine}>{t(language, "subscription_info_note")}</Text>
+      <ActionRow>
+        <Button label={t(language, "open_privacy")} onPress={() => void openLegalUrl("privacy")} variant="secondary" />
+        <Button label={t(language, "open_terms")} onPress={() => void openLegalUrl("terms")} variant="secondary" />
+        <Button label={t(language, "open_help")} onPress={() => void openLegalUrl("help")} variant="secondary" />
+      </ActionRow>
+      <Text style={styles.subheadCompact}>{t(language, "credits_title")}</Text>
+      <Text style={styles.mutedLine}>{tf(language, "balance_line", { credits: settings.credits })}</Text>
       <View style={styles.productGrid}>
         {(Object.entries(creditProducts) as [ProductId, (typeof creditProducts)[ProductId]][]).map(([productId, product]) => (
           <Pressable key={productId} onPress={() => buy(productId)} style={styles.productOption}>
-            <Text style={styles.productTitle}>{product.label}</Text>
-            <Text style={styles.productDescription}>{product.description}</Text>
+            <Text style={styles.productTitle}>{localizeCreditProduct(productId, language).label || product.label}</Text>
+            <Text style={styles.productDescription}>{localizeCreditProduct(productId, language).description || product.description}</Text>
           </Pressable>
         ))}
       </View>
-      {!canAfford("profileSummary") ? <Text style={styles.warningText}>No-credit state: AI features are paused until you add or restore credits.</Text> : null}
+      {!canAfford("profileSummary") ? <Text style={styles.warningText}>{t(language, "no_credit_warning")}</Text> : null}
       {!!message && <Text style={styles.status}>{message}</Text>}
       <ActionRow>
-        {developerMode ? <Button label="Test" onPress={testProvider} /> : null}
-        <Button label="Restore" onPress={restore} variant="secondary" />
-        <Button label="Import" onPress={importBackup} variant="secondary" />
-        <Button label="Reset" onPress={resetLocalData} variant="ghost" />
+        <Button label={t(language, "restore")} onPress={restore} variant="secondary" />
+        <Button label={t(language, "reset")} onPress={resetLocalData} variant="ghost" />
       </ActionRow>
-      <Text style={styles.subheadCompact}>Activity</Text>
+      <Text style={styles.subheadCompact}>{t(language, "backup_title")}</Text>
+      <Segmented options={[{ label: t(language, "merge"), value: "merge" }, { label: t(language, "replace"), value: "replace" }]} value={backupMode} onChange={setBackupMode} />
+      <Text style={styles.mutedLine}>{backupMode === "merge" ? t(language, "backup_help_merge") : t(language, "backup_help_replace")}</Text>
+      {confirmBackupImport ? (
+        <>
+          <Text style={styles.warningText}>{getBackupConfirmText(language, backupMode)}</Text>
+          <ActionRow>
+            <Button label={language === "tr" ? "??e Aktarmay? Onayla" : "Confirm Import"} onPress={importBackup} variant="secondary" />
+            <Button label={language === "tr" ? "Vazge?" : "Cancel"} onPress={() => setConfirmBackupImport(false)} variant="ghost" />
+          </ActionRow>
+        </>
+      ) : (
+        <ActionRow>
+          <Button label={t(language, "import")} onPress={() => setConfirmBackupImport(true)} variant="secondary" />
+        </ActionRow>
+      )}
+      <Text style={styles.subheadCompact}>{t(language, "activity_title")}</Text>
       {creditTransactions.length ? creditTransactions.map((item) => (
         <View key={item.id} style={styles.historyRowCompact}>
           <Text style={styles.historyTitle}>{item.note}</Text>
-          <Text style={styles.historyMeta}>{new Date(item.createdAt).toLocaleString()}</Text>
-          <Text style={styles.historyDetail}>{item.amount > 0 ? `+${item.amount}` : item.amount} credits</Text>
+          <Text style={styles.historyMeta}>{formatDateTime(language, item.createdAt)}</Text>
+          <Text style={styles.historyDetail}>{tf(language, "credit_amount", { value: item.amount > 0 ? `+${item.amount}` : item.amount })}</Text>
         </View>
-      )) : <EmptyState text="No credit activity yet." />}
+      )) : <EmptyState text={t(language, "no_credit_activity")} />}
     </Section>
   );
 }
 
-function embeddedStatus(resolvedApiBaseUrl: string, settingsApiBaseUrl: string) {
-  if (isDeveloperBuild()) {
-    return `Current API: ${resolvedApiBaseUrl || settingsApiBaseUrl || "Not set"}`;
-  }
-  return "The app uses its built-in AI connection.";
+function localizeCreditProduct(productId: ProductId, language: AppLanguage) {
+  if (language !== "tr") return creditProducts[productId];
+  const trCopy: Record<ProductId, { label: string; description: string; credits: number }> = {
+    credits_25: { label: "25 kredi", credits: 25, description: "Hızlı optimizasyon paketi" },
+    credits_100: { label: "100 kredi", credits: 100, description: "Başvuru maratonu paketi" }
+  };
+  return trCopy[productId];
 }
 
+function getTonePreview(tone: "direct" | "executive" | "technical", language: AppLanguage) {
+  if (language === "tr") {
+    if (tone === "executive") return [
+      "Daha stratejik ve kıdemli bir dil öne çıkar.",
+      "Sahiplik, paydaş uyumu ve iş etkisi daha görünür olur.",
+      "Özetler daha karar verici odaklı okunur."
+    ];
+    if (tone === "technical") return [
+      "Araçlar, yöntemler ve uygulama detayları daha net yazılır.",
+      "Süreç ve teknik katkı daha görünür hale gelir.",
+      "Çıktı daha sistematik ve uygulamaya yakın hissedilir."
+    ];
+    return [
+      "Kısa, net ve doğrudan bir anlatım öne çıkar.",
+      "Gereksiz süslemeler azalır.",
+      "Mesaj daha hızlı ve anlaşılır okunur."
+    ];
+  }
+  if (tone === "executive") return [
+    "The writing becomes more strategic and senior in tone.",
+    "Ownership, stakeholder alignment, and business impact stand out.",
+    "Summaries read more decision-maker friendly."
+  ];
+  if (tone === "technical") return [
+    "Tools, methods, and implementation detail become more explicit.",
+    "Process and technical contribution become easier to see.",
+    "The output feels more systematic and execution focused."
+  ];
+  return [
+    "The writing stays short, direct, and plainspoken.",
+    "Extra framing is reduced.",
+    "The message becomes faster to scan."
+  ];
+}
+
+function getBackupConfirmText(language: AppLanguage, backupMode: "merge" | "replace") {
+  if (language === "tr") {
+    return backupMode === "merge"
+      ? "Birleştir seçili. Yedekteki kayıtlar mevcut yerel verilere eklenecek."
+      : "Değiştir seçili. Bu cihazdaki yerel veriler yedekteki içerikle yenilenecek.";
+  }
+  return backupMode === "merge"
+    ? "Merge is selected. Backup records will be added into the current local data."
+    : "Replace is selected. Local data on this device will be overwritten by the backup.";
+}
 
 function InsightList({ title, items }: { title: string; items: string[] }) {
   if (!items.length) return null;
@@ -1157,25 +1518,28 @@ function InsightList({ title, items }: { title: string; items: string[] }) {
 }
 
 function OptimizedPreview({ draft }: { draft: OptimizedCvDraft }) {
+  const language = useAppStore((state) => state.settings.language);
   const firstExperience = draft.experience?.[0];
   return (
     <View style={styles.previewBlock}>
       {!!draft.summary && (
         <>
-          <Text style={styles.previewLabel}>Summary</Text>
+          <Text style={styles.previewLabel}>{t(language, "summary_section")}</Text>
           <Text style={styles.previewText}>{draft.summary}</Text>
         </>
       )}
-      <InsightList title="Skills" items={draft.skills ?? []} />
+      <InsightList title={t(language, "skills_section")} items={draft.skills ?? []} />
       {firstExperience ? (
         <View style={styles.insights}>
-          <Text style={styles.insightTitle}>{[firstExperience.role, firstExperience.company].filter(Boolean).join(" | ") || "Experience"}</Text>
+          {[firstExperience.role, firstExperience.company].filter(Boolean).length ? (
+            <Text style={styles.insightTitle}>{[firstExperience.role, firstExperience.company].filter(Boolean).join(" | ")}</Text>
+          ) : null}
           {firstExperience.bullets.map((bullet) => (
             <Text key={bullet} style={styles.insightItem}>- {bullet}</Text>
           ))}
         </View>
       ) : null}
-      <InsightList title="Notes" items={draft.notes ?? []} />
+      <InsightList title={t(language, "notes")} items={draft.notes ?? []} />
     </View>
   );
 }
@@ -1185,15 +1549,16 @@ function cleanBulletInput(line: string) {
 }
 
 function OptimizationStats({ cv, draft, jobDescription }: { cv: Cv; draft: OptimizedCvDraft; jobDescription: string }) {
-  const addedSkills = draft.skills.filter((skill) => !cv.skills.some((current) => current.toLocaleLowerCase("tr") === skill.toLocaleLowerCase("tr")));
+  const language = useAppStore((state) => state.settings.language);
+  const addedSkills = draft.skills.filter((skill) => !cv.skills.some((current) => current.toLocaleLowerCase(TURKISH_LOCALE) === skill.toLocaleLowerCase(TURKISH_LOCALE)));
   const coverage = getKeywordCoverage(jobDescription, draft);
   const bulletDelta = (draft.experience[0]?.bullets.length ?? 0) - (cv.experience[0]?.bullets.length ?? 0);
 
   return (
     <View style={styles.optimizationStats}>
-      <Text style={styles.optimizationStatText}>Keyword coverage: {coverage}%</Text>
-      <Text style={styles.optimizationStatText}>Added skills: {addedSkills.length}</Text>
-      <Text style={styles.optimizationStatText}>Bullet delta: {bulletDelta >= 0 ? `+${bulletDelta}` : bulletDelta}</Text>
+      <Text style={styles.optimizationStatText}>{tf(language, "keyword_coverage", { value: coverage })}</Text>
+      <Text style={styles.optimizationStatText}>{tf(language, "added_skills_count", { value: addedSkills.length })}</Text>
+      <Text style={styles.optimizationStatText}>{tf(language, "bullet_delta", { value: bulletDelta >= 0 ? `+${bulletDelta}` : bulletDelta })}</Text>
       {!!addedSkills.length && <Text style={styles.optimizationStatSub}>{addedSkills.slice(0, 6).join(" | ")}</Text>}
     </View>
   );
@@ -1202,25 +1567,26 @@ function OptimizationStats({ cv, draft, jobDescription }: { cv: Cv; draft: Optim
 function getKeywordCoverage(jobDescription: string, draft: OptimizedCvDraft) {
   const keywords = splitCsv(jobDescription).filter((word) => word.length > 3).slice(0, 18);
   if (!keywords.length) return 0;
-  const haystack = `${draft.summary} ${draft.skills.join(" ")} ${draft.experience.flatMap((item) => item.bullets).join(" ")}`.toLocaleLowerCase("tr");
-  const matched = keywords.filter((keyword) => haystack.includes(keyword.toLocaleLowerCase("tr")));
+  const haystack = `${draft.summary} ${draft.skills.join(" ")} ${draft.experience.flatMap((item) => item.bullets).join(" ")}`.toLocaleLowerCase(TURKISH_LOCALE);
+  const matched = keywords.filter((keyword) => haystack.includes(keyword.toLocaleLowerCase(TURKISH_LOCALE)));
   return Math.round((matched.length / keywords.length) * 100);
 }
 
 function enrichAtsReport(report: AtsReport, cv: Cv): AtsReport {
+  const language = useAppStore.getState().settings.language;
   const formattingIssues = [...(report.formattingIssues ?? [])];
   const riskyPhrases = [...(report.riskyPhrases ?? [])];
   const actionItems = [...(report.actionItems ?? [])];
-  const raw = cv.rawText.toLocaleLowerCase("tr");
+  const raw = cv.rawText.toLocaleLowerCase(TURKISH_LOCALE);
 
-  if (cv.rawText.length > 4000) formattingIssues.push("CV is quite long. Trim less relevant detail.");
-  if (cv.experience.some((item) => item.bullets.length > 6)) formattingIssues.push("Some roles have too many bullets.");
+  if (cv.rawText.length > 4000) formattingIssues.push(t(language, "cv_too_long"));
+  if (cv.experience.some((item) => item.bullets.length > 6)) formattingIssues.push(t(language, "too_many_bullets"));
   for (const phrase of ["hardworking", "team player", "responsible for", "helped with"]) {
-    if (raw.includes(phrase)) riskyPhrases.push(`Replace weak phrase: ${phrase}`);
+    if (raw.includes(phrase)) riskyPhrases.push(tf(language, "replace_weak_phrase", { phrase }));
   }
   if (!actionItems.length) {
-    actionItems.push("Keep each bullet short and outcome-oriented.");
-    if (report.missingKeywords?.length) actionItems.push("Add the strongest missing keywords naturally into summary or experience.");
+    actionItems.push(t(language, "keep_bullets_short"));
+    if (report.missingKeywords?.length) actionItems.push(t(language, "add_missing_keywords_naturally"));
   }
 
   return {
@@ -1235,10 +1601,33 @@ function uniqueStrings(items: string[]) {
   return [...new Set(items.filter(Boolean))];
 }
 
+function formatDateTime(language: AppLanguage, value: string) {
+  const locale = language === "tr" ? "tr-TR" : "en-US";
+  return new Date(value).toLocaleString(locale, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
 function upsertAt<T>(items: T[], index: number, value: T) {
   const next = [...items];
   next[index] = value;
   return next;
+}
+
+function formatEducationDraft(education?: { degree?: string; school?: string; period?: string } | null) {
+  if (!education) return "";
+  return [education.degree, education.school, education.period].map((item) => String(item ?? "").trim()).filter(Boolean).join(", ");
+}
+
+function localizeCvName(name: string, language: AppLanguage) {
+  if (language !== "tr") return name;
+  if (name === "Primary CV" || name === "Ana CV") return "Ana Özgeçmiş";
+  if (name === "New CV" || name === "Yeni CV") return "Yeni Özgeçmiş";
+  return name.replace(/ Copy$/, " Kopya");
 }
 
 function ChoiceRail<T extends string>({
@@ -1251,7 +1640,7 @@ function ChoiceRail<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.choiceRail}>
+    <View style={styles.choiceRail}>
       {options.map((option) => (
         <Pressable
           key={option.value}
@@ -1264,7 +1653,7 @@ function ChoiceRail<T extends string>({
           <Text style={[styles.choiceText, value === option.value && styles.choiceTextActive]}>{option.label}</Text>
         </Pressable>
       ))}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -1288,7 +1677,7 @@ const styles = StyleSheet.create({
     flexGrow: 0
   },
   sidebarCompact: {
-    maxHeight: 88,
+    maxHeight: 76,
     borderTopWidth: 1,
     borderTopColor: "#1E293B",
     shadowColor: "#0F172A",
@@ -1301,8 +1690,8 @@ const styles = StyleSheet.create({
     gap: 8
   },
   navContentCompact: {
-    paddingVertical: 9,
-    paddingHorizontal: 10
+    paddingVertical: 6,
+    paddingHorizontal: 8
   },
   navItem: {
     minHeight: 44,
@@ -1313,13 +1702,13 @@ const styles = StyleSheet.create({
     gap: 10
   },
   navItemCompact: {
-    minWidth: 72,
-    minHeight: 60,
+    minWidth: 58,
+    minHeight: 48,
     justifyContent: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
     flexDirection: "column",
-    gap: 4
+    gap: 2
   },
   navItemActive: {
     backgroundColor: "#1E293B"
@@ -1330,8 +1719,8 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   navIndexBubble: {
-    minWidth: 24,
-    height: 24,
+    minWidth: 20,
+    height: 20,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
@@ -1349,7 +1738,7 @@ const styles = StyleSheet.create({
     fontWeight: "700"
   },
   navLabelCompact: {
-    fontSize: 11,
+    fontSize: 10,
     textAlign: "center"
   },
   navLabelActive: {
@@ -1368,6 +1757,114 @@ const styles = StyleSheet.create({
   contentCompactTight: {
     paddingBottom: 10
   },
+  splashSection: {
+    flex: 1,
+    minHeight: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10
+  },
+  splashMark: {
+    width: 88,
+    height: 88,
+    borderRadius: 24,
+    backgroundColor: colors.ink,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.18,
+    shadowRadius: 22,
+    elevation: 8
+  },
+  splashIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 18
+  },
+  splashName: {
+    color: colors.ink,
+    fontSize: 38,
+    lineHeight: 42,
+    fontWeight: "900",
+    includeFontPadding: false
+  },
+  splashSubtitle: {
+    color: colors.muted,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: "center"
+  },
+  splashProgress: {
+    width: 150,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "#E2E8F0",
+    overflow: "hidden",
+    marginTop: 8
+  },
+  splashProgressFill: {
+    width: "72%",
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: colors.accent
+  },
+  onboardingScroll: {
+    flexGrow: 1,
+    justifyContent: "center"
+  },
+  onboardingSection: {
+    flex: 1,
+    justifyContent: "center",
+    minHeight: "100%"
+  },
+  onboardingList: {
+    gap: 10,
+    marginTop: 6,
+    marginBottom: 10
+  },
+  onboardingItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    borderRadius: 8,
+    padding: 14
+  },
+  onboardingIndex: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.ink
+  },
+  onboardingIndexText: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  onboardingCopy: {
+    flex: 1,
+    gap: 4
+  },
+  onboardingItemTitle: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "800",
+    lineHeight: 21
+  },
+  onboardingItemBody: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20
+  },
+  consentSection: {
+    flex: 1,
+    justifyContent: "center",
+    minHeight: "100%"
+  },
   scrollArea: {
     flex: 1
   },
@@ -1382,45 +1879,104 @@ const styles = StyleSheet.create({
     minHeight: 62,
     paddingHorizontal: 14
   },
-  headerTextWrap: {
-    gap: 2
-  },
-  headerBrandRow: {
+  headerTopRow: {
+    width: "100%",
     flexDirection: "row",
     alignItems: "center",
-    gap: 10
+    justifyContent: "space-between"
   },
-  headerBrandTextWrap: {
-    gap: 2
+  headerTextWrap: {
+    gap: 2,
+    flexShrink: 1
   },
-  brand: {
-    color: colors.ink,
-    fontSize: 16,
+  headerControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  languageSwitch: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6
+  },
+  languageChip: {
+    minWidth: 36,
+    height: 32,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8
+  },
+  languageChipActive: {
+    borderColor: colors.accent,
+    backgroundColor: colors.soft
+  },
+  languageChipText: {
+    color: colors.muted,
+    fontSize: 12,
     fontWeight: "800"
+  },
+  languageChipTextActive: {
+    color: colors.accentDark
+  },
+  brandLockup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    alignSelf: "flex-start"
+  },
+  brandLockupHeader: {
+    minHeight: 30
+  },
+  brandLockupHero: {
+    marginBottom: 10
+  },
+  brandLockupPanel: {
+    gap: 12
+  },
+  brandLockupLoading: {
+    justifyContent: "center",
+    marginBottom: 8
+  },
+  brandLockupIcon: {
+    flexShrink: 0
+  },
+  brandWordmark: {
+    color: colors.ink,
+    fontWeight: "800",
+    includeFontPadding: false
   },
   headerIcon: {
     width: 30,
     height: 30,
     borderRadius: 8
   },
-  headerLogo: {
-    width: 108,
-    height: 28
+  headerWordmark: {
+    fontSize: 26,
+    lineHeight: 28,
+    letterSpacing: 0.2
   },
   headerStep: {
     color: colors.muted,
     fontSize: 12,
     fontWeight: "700"
   },
-  loadingLogo: {
-    width: 136,
+  loadingIcon: {
+    width: 40,
     height: 40,
-    marginBottom: 8
+    borderRadius: 12
+  },
+  loadingWordmark: {
+    fontSize: 30,
+    lineHeight: 32,
+    letterSpacing: 0.2
   },
   brandCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
     marginTop: 8,
     marginBottom: 8,
     padding: 12,
@@ -1429,43 +1985,49 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: colors.white
   },
+  infoPanel: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    borderRadius: 8,
+    padding: 14,
+    gap: 8,
+    marginTop: 6,
+    marginBottom: 10
+  },
+  infoPanelSoft: {
+    borderWidth: 1,
+    borderColor: "#D8E0F0",
+    backgroundColor: "#F8FAFF",
+    borderRadius: 8,
+    padding: 14,
+    gap: 6,
+    marginBottom: 8
+  },
+  infoText: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 21
+  },
   brandIcon: {
     width: 40,
     height: 40,
     borderRadius: 10
   },
-  brandLogo: {
-    width: 116,
-    height: 32
-  },
-  heroPanel: {
-    borderWidth: 1,
-    borderColor: "#DCE3F1",
-    backgroundColor: colors.white,
-    borderRadius: 8,
-    padding: 14,
-    marginBottom: 10
-  },
-  heroBrandRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 10
+  panelWordmark: {
+    fontSize: 28,
+    lineHeight: 30,
+    letterSpacing: 0.2
   },
   heroIcon: {
     width: 42,
     height: 42,
     borderRadius: 12
   },
-  heroLogo: {
-    width: 122,
-    height: 32
-  },
-  heroLine: {
-    color: colors.ink,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "700"
+  heroWordmark: {
+    fontSize: 30,
+    lineHeight: 34,
+    letterSpacing: 0.2
   },
   creditPill: {
     borderWidth: 1,
@@ -1500,17 +2062,23 @@ const styles = StyleSheet.create({
   status: {
     color: colors.success,
     fontWeight: "700",
-    marginVertical: 10
+    marginTop: 14,
+    marginBottom: 6,
+    textAlign: "center",
+    alignSelf: "center",
+    maxWidth: 420,
+    lineHeight: 20
   },
   costHint: {
-    alignSelf: "flex-start",
+    alignSelf: "center",
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.white,
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    marginTop: 2
+    marginTop: 12,
+    marginBottom: 4
   },
   costHintEmpty: {
     borderColor: "#FCA5A5",
@@ -1519,7 +2087,8 @@ const styles = StyleSheet.create({
   costHintText: {
     color: colors.muted,
     fontSize: 12,
-    fontWeight: "700"
+    fontWeight: "700",
+    textAlign: "center"
   },
   costHintTextEmpty: {
     color: colors.danger
@@ -1551,7 +2120,7 @@ const styles = StyleSheet.create({
     marginTop: 14
   },
   productGrid: {
-    gap: 10,
+    gap: 8,
     marginBottom: 12
   },
   productOption: {
@@ -1559,18 +2128,26 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     backgroundColor: colors.white,
     borderRadius: 8,
-    padding: 14
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    minHeight: 72,
+    justifyContent: "center",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1
   },
   productTitle: {
     color: colors.ink,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800",
-    marginBottom: 4
+    marginBottom: 3
   },
   productDescription: {
     color: colors.muted,
-    fontSize: 13,
-    lineHeight: 18
+    fontSize: 12.5,
+    lineHeight: 17
   },
   optimizationStats: {
     borderWidth: 1,
@@ -1624,7 +2201,7 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     backgroundColor: colors.line,
-    marginVertical: 18
+    marginVertical: 22
   },
   subhead: {
     color: colors.ink,
@@ -1636,36 +2213,120 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 14,
     fontWeight: "800",
-    marginTop: 8,
+    marginTop: 12,
+    marginBottom: 10
+  },
+  tonePreviewBox: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 4,
     marginBottom: 8
+  },
+  tonePreviewText: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 20
   },
   builderGroup: {
     borderLeftWidth: 1,
     borderLeftColor: "#C7D2FE",
     paddingLeft: 12,
-    marginBottom: 4
+    marginBottom: 10
   },
   actions: {
     flexDirection: "row",
     flexWrap: "wrap",
+    width: "100%",
     gap: 10,
-    marginTop: 12
+    marginTop: 14
   },
   actionsCompact: {
-    flexDirection: "column"
+    flexDirection: "row",
+    alignItems: "stretch"
+  },
+  centerAction: {
+    width: "100%",
+    maxWidth: 260,
+    alignSelf: "center",
+    marginTop: 10,
+    marginBottom: 4
   },
   choiceRail: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    width: "100%",
     gap: 8,
-    paddingVertical: 4
+    paddingVertical: 6
+  },
+  spacingPreview: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 4,
+    marginBottom: 6
+  },
+  spacingPreviewRow: {
+    flexDirection: "row",
+    gap: 8
+  },
+  spacingPreviewCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 8,
+    padding: 8,
+    backgroundColor: "#FCFDFE"
+  },
+  spacingPreviewCardActive: {
+    borderColor: colors.accent,
+    backgroundColor: "#EEF2FF"
+  },
+  spacingPreviewStack: {
+    marginTop: 8
+  },
+  spacingPreviewLineLg: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: "#0F172A",
+    width: "68%"
+  },
+  spacingPreviewLineSm: {
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "#94A3B8",
+    width: "100%"
+  },
+  spacingPreviewLineShort: {
+    width: "74%"
+  },
+  spacingPreviewCaption: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 8,
+    textAlign: "center",
+    textTransform: "uppercase"
+  },
+  spacingPreviewCaptionActive: {
+    color: colors.accent
   },
   choice: {
-    minHeight: 40,
+    minHeight: 42,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.white,
+    alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 14
+    paddingHorizontal: 14,
+    minWidth: 110,
+    flexGrow: 1,
+    flexBasis: 0
   },
   choiceActive: {
     borderColor: colors.accent,
@@ -1674,7 +2335,8 @@ const styles = StyleSheet.create({
   choiceText: {
     color: colors.muted,
     fontSize: 13,
-    fontWeight: "800"
+    fontWeight: "800",
+    textAlign: "center"
   },
   choiceTextActive: {
     color: colors.accentDark
@@ -1716,6 +2378,30 @@ const styles = StyleSheet.create({
     padding: 18,
     width: "100%",
     alignSelf: "stretch"
+  },
+  modeBadge: {
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginBottom: 10
+  },
+  modeBadgeHuman: {
+    borderColor: "#C7D2FE",
+    backgroundColor: "#EEF2FF"
+  },
+  modeBadgeText: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0
+  },
+  modeBadgeTextHuman: {
+    color: colors.accent
   },
   cvPaperCompact: {
     marginTop: 14,

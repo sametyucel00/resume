@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hirvia | Hukuk ve Yardım Merkezi</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #0f172a;
+        --muted: #475569;
+        --line: #e2e8f0;
+        --bg: #f8fafc;
+        --card: #ffffff;
+        --accent: #6366f1;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+        line-height: 1.65;
+      }
+      .wrap {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 40px 20px 72px;
+      }
+      .eyebrow {
+        color: var(--accent);
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        font-size: 12px;
+      }
+      h1 {
+        margin: 8px 0 10px;
+        font-size: clamp(34px, 6vw, 52px);
+        line-height: 1.05;
+      }
+      .lead {
+        color: var(--muted);
+        max-width: 760px;
+        font-size: 17px;
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 13px;
+        margin-top: 12px;
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 24px 0 32px;
+      }
+      nav a {
+        text-decoration: none;
+        border: 1px solid var(--line);
+        color: var(--ink);
+        background: var(--card);
+        border-radius: 999px;
+        padding: 10px 14px;
+        font-weight: 600;
+      }
+      section {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 24px;
+        margin-bottom: 16px;
+      }
+      h2 {
+        margin: 0 0 14px;
+        font-size: 22px;
+      }
+      p, li {
+        color: var(--muted);
+        font-size: 15px;
+      }
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+        margin-top: 14px;
+      }
+      .mini {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px;
+        background: #fbfdff;
+      }
+      .mini strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+      code {
+        background: #eef2ff;
+        color: #3730a3;
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <div class="eyebrow">Hirvia</div>
+      <h1>Hukuk ve Yardım Merkezi</h1>
+      <p class="lead">
+        Hirvia; CV geliştirme, iş ilanı eşleştirme, ATS kontrolü ve mülakat hazırlığı sunan AI destekli bir iş başvurusu yardımcısıdır.
+        Bu sayfa gizlilik, kullanım koşulları, abonelikler ve veri paylaşımı ile ilgili temel bilgileri açıklar.
+      </p>
+      <p class="meta">Son güncelleme: 22 Nisan 2026</p>
+
+      <nav>
+        <a href="#privacy">Gizlilik</a>
+        <a href="#terms">Koşullar</a>
+        <a href="#help">Yardım</a>
+        <a href="#subscription">Abonelik</a>
+        <a href="#ai">AI Veri Paylaşımı</a>
+        <a href="#deletion">Veri Silme</a>
+      </nav>
+
+      <section id="privacy">
+        <h2>Gizlilik Politikası</h2>
+        <p>
+          Hirvia yerel öncelikli çalışır. Profil, CV taslakları, geçmiş, kredi bilgisi ve ayarlar önce cihazda tutulur.
+        </p>
+        <p>
+          Hirvia kullanıcıdan hesap oluşturmasını istemez ve Firebase ya da benzeri bulut veri tabanı kullanmaz.
+          Kullanıcı tarafından oluşturulan CV, profil ve geçmiş verileri cihazdaki yerel depolamada tutulur.
+        </p>
+        <p>
+          Kullanıcı AI veri paylaşım izni verirse, CV metni, profil özetleri, iş ilanı, mülakat notları ve ilgili bağlam
+          yalnızca işleme amacıyla güvenli backend üzerinden üçüncü taraf AI sağlayıcısına gönderilebilir.
+          Bu veri sadece özet, optimizasyon, ATS geri bildirimi ve mülakat hazırlığı üretmek için kullanılır.
+        </p>
+        <p>
+          Kullanıcı bu izni uygulama içindeki Ayarlar ekranından açıp kapatabilir. İzin kapalıyken uygulama açılmaya devam eder,
+          ancak AI özellikleri kullanılmaz.
+        </p>
+        <p>
+          Yedek dışarı aktarımları kullanıcı tarafından başlatılır. JSON, metin veya PDF dosyaları kullanıcının kendi cihazına indirilir
+          ya da cihazdaki paylaşım menüsü üzerinden seçilen hedefe aktarılır.
+        </p>
+      </section>
+
+      <section id="terms">
+        <h2>Kullanım Koşulları</h2>
+        <p>
+          Hirvia profesyonel ve gerçekçi iş başvurusu desteği sunar. Uygulama işe alımı garanti etmez, hukuki tavsiye vermez
+          ve profesyonel insan kaynakları kararının yerine geçmez.
+        </p>
+        <p>
+          Üretilen AI çıktıları kullanıcının sağladığı veri ve seçilen role göre yorumlayıcıdır. Kullanıcı son kararı kendi
+          koşulları ve sorumluluğu altında verir.
+        </p>
+        <p>
+          Yanıltıcı, uydurma veya başka kişileri aldatmaya yönelik kullanım desteklenmez.
+        </p>
+        <p>
+          Kullanıcı, CV ve başvuru metinlerinde doğru bilgi kullanmaktan sorumludur. Hirvia, AI tarafından üretilen metinleri
+          profesyonel bir taslak olarak sunar; son kontrol ve yayın sorumluluğu kullanıcıya aittir.
+        </p>
+      </section>
+
+      <section id="help">
+        <h2>Yardım Merkezi</h2>
+        <ul>
+          <li>Uygulama girişte hesap zorunluluğu olmadan açılır.</li>
+          <li>CV, geçmiş ve ayarlar cihazda tutulur.</li>
+          <li>Standart AI işlemleri kredi kullanır.</li>
+          <li>AI veri paylaşım izni kapalıysa AI aksiyonları durur.</li>
+          <li>Yedek alma ve yedekten geri yükleme Ayarlar içinden yapılabilir.</li>
+        </ul>
+      </section>
+
+      <section id="subscription">
+        <h2>Satın Alma ve Kredi Paketleri</h2>
+        <p>
+          Hirvia'nın mevcut uygulama içi satın alma sistemi AI işlemleri için tek seferlik kredi paketleri sunar.
+          Satın almalar Apple App Store ve Google Play Billing üzerinden yapılır. Ödeme, iptal ve geri ödeme
+          kuralları ilgili mağaza politikaları tarafından yönetilir.
+        </p>
+        <p>
+          Tek seferlik kredi paketleri kullanıcı hesabına değil, uygulamanın yerel kredi bakiyesine ek kullanım hakkı verir.
+          Mağaza satın alımlarını geri yükleme seçeneği uygulama içindeki Ayarlar ekranında bulunur.
+        </p>
+        <p>
+          Mevcut sürümde otomatik yenilenen abonelik ürünü uygulanmamıştır. Uygulamada aktif olan satın alma seçenekleri
+          25 kredi ve 100 kredi paketleridir.
+        </p>
+        <div class="grid">
+          <div class="mini">
+            <strong>25 Kredi Paketi</strong>
+            <p>Hafif CV optimizasyonu ve kısa başvuru hazırlığı için tek seferlik kredi paketi.</p>
+          </div>
+          <div class="mini">
+            <strong>100 Kredi Paketi</strong>
+            <p>Birden fazla iş ilanı için optimizasyon, ATS kontrolü ve mülakat hazırlığı kullanımı.</p>
+          </div>
+        </div>
+        <p>
+          Mevcut ürün kimlikleri:
+          <code>credits_25</code>,
+          <code>credits_100</code>
+        </p>
+      </section>
+
+      <section id="ai">
+        <h2>AI Veri Paylaşım İzni</h2>
+        <p>
+          AI veri paylaşım izni, Hirvia'nın kullanıcının sağladığı içeriği AI özelliklerini çalıştırmak için işlemesine izin verir.
+          Bu izin varsayılan olarak kullanıcıya açıkça sorulur ve Ayarlar ekranından değiştirilebilir.
+        </p>
+        <ul>
+          <li>Paylaşılabilecek veriler: CV metni, profil bilgileri, iş ilanı, mülakat notları ve ilgili uygulama bağlamı.</li>
+          <li>Amaç: profil özeti, madde yeniden yazımı, iş ilanı analizi, CV optimizasyonu, ATS kontrolü ve mülakat hazırlığı.</li>
+          <li>İzin kapalıysa: uygulama temel yerel işlevleriyle açılır, ancak AI aksiyonları çalışmaz.</li>
+          <li>API anahtarları mobil uygulamada tutulmaz; AI çağrıları backend üzerinden yapılır.</li>
+        </ul>
+      </section>
+
+      <section id="deletion">
+        <h2>Veri Silme ve Sıfırlama</h2>
+        <p>
+          Ayarlar ekranından tüm yerel veriler sıfırlanabilir. Bu işlem profil, CV taslakları, geçmiş, kredi kayıtları ve ayarları kaldırır.
+        </p>
+        <p>
+          Kullanıcı ayrıca JSON yedek dışarı aktarımı alabilir ve daha sonra bu yedeği aynı cihazda veya başka bir cihazda içe aktarabilir.
+        </p>
+        <p>
+          Yasal veya mali yükümlülük gerektiren mağaza işlem kayıtları ilgili platform kurallarına göre sınırlı sürelerle saklanabilir.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

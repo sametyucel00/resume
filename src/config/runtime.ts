@@ -9,5 +9,5 @@ export function isDeveloperBuild() {
 export function resolveApiBaseUrl(settingsApiBaseUrl: string) {
   const localValue = String(settingsApiBaseUrl ?? "").trim();
   if (!isDeveloperBuild() && embeddedApiBaseUrl) return embeddedApiBaseUrl;
-  return localValue;
+  return localValue || embeddedApiBaseUrl || "http://localhost:8787";
 }

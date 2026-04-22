@@ -38,7 +38,7 @@ async function generateWithGroq(input) {
     ]
   });
 
-  return completion.choices[0]?.message?.content?.trim() || "";
+  return preserveUtf8(completion.choices[0]?.message?.content?.trim() || "");
 }
 
 async function generateWithOpenAI(input) {
@@ -50,7 +50,7 @@ async function generateWithOpenAI(input) {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type": "application/json; charset=utf-8",
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
     },
     body: JSON.stringify({
@@ -76,7 +76,7 @@ async function testAIProvider(provider = "groq") {
 }
 
 function extractOpenAIText(data) {
-  if (typeof data.output_text === "string") return data.output_text.trim();
+  if (typeof data.output_text === "string") return preserveUtf8(data.output_text.trim());
   const chunks = [];
   for (const item of data.output || []) {
     for (const content of item.content || []) {
@@ -84,7 +84,11 @@ function extractOpenAIText(data) {
       if (typeof content.text === "string") chunks.push(content.text);
     }
   }
-  return chunks.join("\n").trim();
+  return preserveUtf8(chunks.join("\n").trim());
+}
+
+function preserveUtf8(value) {
+  return String(value || "").normalize("NFC");
 }
 
 module.exports = { generateAIResponse, getAIModel, getProviderConfigStatus, testAIProvider };

@@ -2,6 +2,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import { Platform } from "react-native";
 import { preserveUtf8 } from "../utils/text";
+import { useAppStore } from "../store/useAppStore";
 
 type ImportResult = {
   name: string;
@@ -38,11 +39,12 @@ export async function pickCvDocument(apiBaseUrl: string): Promise<ImportResult |
 }
 
 async function uploadForParsing(apiBaseUrl: string, file: Blob, name: string): Promise<ImportResult> {
+  const language = useAppStore.getState().settings.language;
   const form = new FormData();
   form.append("file", file, name);
   const response = await fetch(`${apiBaseUrl}/api/import`, { method: "POST", body: form });
   if (!response.ok) {
-    let message = "Could not parse document";
+    let message = language === "tr" ? "Belge ayrıştırılamadı." : "Could not parse document";
     try {
       const data = (await response.json()) as { error?: string };
       message = data.error || message;

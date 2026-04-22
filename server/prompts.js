@@ -5,42 +5,66 @@ const system = [
   "Write short, clear, realistic, professional output.",
   "Never exaggerate. Avoid generic phrases.",
   "Focus on impact, results, clarity, and job relevance.",
+  "Use only evidence that is present in the provided CV, profile, STAR draft, or job description.",
+  "Do not invent employers, tools, metrics, achievements, years, or responsibilities.",
+  "Prefer specific wording over motivational language.",
   "Preserve UTF-8 text exactly, including Turkish characters: \u00e7 \u00c7 \u011f \u011e \u0131 I \u0130 i \u00f6 \u00d6 \u015f \u015e \u00fc \u00dc.",
   "Do not uppercase Turkish text unless the user explicitly asks."
 ].join(" ");
 
+function languageRule(input) {
+  if (input && input.language === "tr") {
+    return "Write every user-facing word in Turkish. Use natural Turkish labels and preserve Turkish characters exactly: \\u00e7 \\u00c7 \\u011f \\u011e \\u0131 I \\u0130 i \\u00f6 \\u00d6 \\u015f \\u015e \\u00fc \\u00dc. Do not return English section names except fixed technical terms such as ATS or STAR.";
+  }
+  return "Write every user-facing word in English.";
+}
+
+function systemFor(input) {
+  return `${system} ${languageRule(input)}`;
+}
+
+function toneRule(input) {
+  if (input?.tone === "executive") {
+    return "Use a strategic, senior, concise tone. Prioritize business impact, decision-making, ownership, and stakeholder alignment.";
+  }
+  if (input?.tone === "technical") {
+    return "Use a practical technical tone. Prioritize tools, methods, systems, implementation detail, and measurable execution.";
+  }
+  return "Use a direct, concise, plainspoken tone. Prioritize clarity, action, and realistic outcomes.";
+}
+
 const prompts = {
   profileSummary: (input) => ({
-    system,
-    user: `Create a concise profile summary from this profile. Tone: ${input.tone || "direct"}.\n\n${JSON.stringify(input.profile, null, 2)}`
+    system: systemFor(input),
+    user: `Create a concise profile summary from this profile. ${toneRule(input)} Return one short paragraph only. Do not use bullet points, labels, greetings, or signatures. Do not repeat the person's name unless it is necessary for clarity.\n\n${JSON.stringify(input.profile, null, 2)}`
   }),
   rewriteBullets: (input) => ({
-    system,
-    user: `Rewrite these experience bullets. Keep them truthful, specific, and concise.\n\n${JSON.stringify(input, null, 2)}`
+    system: systemFor(input),
+    user: `Rewrite these experience bullets. ${toneRule(input)} Keep them truthful, specific, and concise.\n\n${JSON.stringify(input, null, 2)}`
   }),
   organizeSkills: (input) => ({
-    system,
-    user: `Organize skills into compact categories. Return only category lines.\n\n${JSON.stringify(input, null, 2)}`
+    system: systemFor(input),
+    user: `Organize skills into compact categories. ${toneRule(input)} Return only category lines.\n\n${JSON.stringify(input, null, 2)}`
   }),
   analyzeJob: (input) => ({
-    system: `${system} Return valid JSON only.`,
-    user: `Analyze this job description. Return JSON with title, company, mustHave, niceToHave, keywords, risks.\n\n${input.jobDescription || ""}`
+    system: `${systemFor(input)} Return valid JSON only. Use Turkish JSON string values when language is tr; keep the JSON keys unchanged.`,
+    user: `Analyze this job description. ${toneRule(input)} Return JSON with title, company, mustHave, niceToHave, keywords, risks.\n\n${input.jobDescription || ""}`
   }),
   optimizeCv: (input) => ({
-    system: `${system} Return valid JSON only.`,
-    user: `Optimize this CV for the job. Return JSON with summary, skills, experience, notes. Experience must contain role, company, period, bullets. Keep claims realistic and do not invent metrics.\n\nCV:\n${JSON.stringify(input.cv, null, 2)}\n\nJOB:\n${input.jobDescription || ""}\n\nTone: ${input.tone || "direct"}`
+    system: `${systemFor(input)} Return valid JSON only. Use Turkish JSON string values when language is tr; keep the JSON keys unchanged.`,
+    user: `Optimize this CV for the job. ${toneRule(input)} Return JSON with summary, skills, experience, notes. Experience must contain role, company, period, bullets. Keep claims realistic and do not invent metrics. Only include skills that materially support the target role. Notes should be short and action-oriented.\n\nCV:\n${JSON.stringify(input.cv, null, 2)}\n\nJOB:\n${input.jobDescription || ""}`
   }),
   atsCheck: (input) => ({
-    system: `${system} Return valid JSON only.`,
-    user: `Run an ATS compatibility check. Return JSON with score number 0-100, strengths, fixes, missingKeywords, formattingIssues, riskyPhrases, actionItems.\n\nCV:\n${JSON.stringify(input.cv, null, 2)}\n\nJOB:\n${input.jobDescription || ""}`
+    system: `${systemFor(input)} Return valid JSON only. Use Turkish JSON string values when language is tr; keep the JSON keys unchanged.`,
+    user: `Run an ATS compatibility check. ${toneRule(input)} Return JSON with score number 0-100, strengths, fixes, missingKeywords, formattingIssues, riskyPhrases, actionItems. Base the score only on the supplied CV and job description. Keep fixes practical and specific.\n\nCV:\n${JSON.stringify(input.cv, null, 2)}\n\nJOB:\n${input.jobDescription || ""}`
   }),
   interviewQuestions: (input) => ({
-    system: `${system} Return valid JSON only.`,
-    user: `Generate 6 realistic interview questions for this job and CV. Return JSON with categories: Behavioral, Technical, Role Fit. Each category must have an items array with 2 questions. Keep questions specific.\n\n${JSON.stringify(input, null, 2)}`
+    system: `${systemFor(input)} Return valid JSON only. Use Turkish JSON string values when language is tr; keep category title values as Behavioral, Technical, or Role Fit for app mapping.`,
+    user: `Generate 6 realistic interview questions for this job and CV. ${toneRule(input)} Return JSON with categories: Behavioral, Technical, Role Fit. Each category must have an items array with 2 questions. Keep questions specific.\n\n${JSON.stringify(input, null, 2)}`
   }),
   interviewAnswers: (input) => ({
-    system,
-    user: `Create concise answer starters for these questions. Use grounded STAR-style notes, not scripts.\n\n${JSON.stringify(input, null, 2)}`
+    system: systemFor(input),
+    user: `Create concise answer starters for these questions. ${toneRule(input)} Use grounded STAR-style notes, not scripts. Keep each answer to 3-5 sentences, stay faithful to the provided experience, and avoid invented details.\n\n${JSON.stringify(input, null, 2)}`
   })
 };
 

@@ -1,5 +1,5 @@
-import { Cv, Profile } from "../types";
-import { splitCsv, splitLines } from "../utils/text";
+import { AppLanguage, Cv, Profile } from "../types";
+import { includesTurkishInsensitive, splitCsv, splitLines, toTurkishLower } from "../utils/text";
 
 export function mergeProfileIntoCv(profile: Profile, cv: Cv): Cv {
   return {
@@ -11,9 +11,9 @@ export function mergeProfileIntoCv(profile: Profile, cv: Cv): Cv {
 
 export function parseRawCvText(cv: Cv): Cv {
   const lines = splitLines(cv.rawText);
-  const skillLine = lines.find((line) => skillHeaderPattern.test(line));
-  const educationIndex = lines.findIndex((line) => educationHeaderPattern.test(line));
-  const experienceIndex = lines.findIndex((line) => experienceHeaderPattern.test(line));
+  const skillLine = lines.find((line) => matchesAnyHeader(line, skillHeaders));
+  const educationIndex = lines.findIndex((line) => matchesAnyHeader(line, educationHeaders));
+  const experienceIndex = lines.findIndex((line) => matchesAnyHeader(line, experienceHeaders));
   const summary = cv.summary || findSummary(lines);
   const parsedExperience = inferExperience(lines, experienceIndex);
   const parsedEducation = inferEducation(lines, educationIndex);
@@ -21,7 +21,7 @@ export function parseRawCvText(cv: Cv): Cv {
   return {
     ...cv,
     summary: summary.slice(0, 520),
-    skills: cv.skills.length ? cv.skills : skillLine ? splitCsv(skillLine.replace(/skills|yetenekler|tools/gi, "")) : [],
+    skills: cv.skills.length ? cv.skills : skillLine ? splitCsv(removeKnownSkillHeader(skillLine)) : [],
     experience: cv.experience.length ? cv.experience : parsedExperience,
     education: cv.education.length ? cv.education : parsedEducation
   };
@@ -37,19 +37,20 @@ export function estimateCvParseConfidence(cv: Cv) {
   return Math.min(100, score);
 }
 
-const summaryHeaderPattern = /summary|profile|about|objective|ozet|\u00f6zet|hakkimda|hakk\u0131mda/i;
-const experienceHeaderPattern = /experience|deneyim|is deneyimi|i\u015f deneyimi|work history|employment|career|positions|projects|projeler/i;
-const educationHeaderPattern = /education|egitim|e\u011fitim|university|universite|\u00fcniversite|degree|bachelor|master|lisans|yuksek lisans|y\u00fcksek lisans/i;
-const skillHeaderPattern = /skills|yetenek|yetkinlik|teknoloji|tools|competencies|uzmanlik|uzmanl\u0131k|languages|diller/i;
+const summaryHeaders = ["summary", "profile", "about", "objective", "ozet", "\u00f6zet", "hakkimda", "hakk\u0131mda"];
+const experienceHeaders = ["experience", "deneyim", "is deneyimi", "i\u015f deneyimi", "work history", "employment", "career", "positions", "projects", "projeler"];
+const educationHeaders = ["education", "egitim", "e\u011fitim", "university", "universite", "\u00fcniversite", "degree", "bachelor", "master", "lisans", "yuksek lisans", "y\u00fcksek lisans"];
+const skillHeaders = ["skills", "yetenek", "yetkinlik", "teknoloji", "tools", "competencies", "uzmanlik", "uzmanl\u0131k", "languages", "diller"];
+const sectionHeaders = [...summaryHeaders, ...experienceHeaders, ...educationHeaders, ...skillHeaders, "certifications", "sertifika", "sertifikalar", "licenses", "lisanslar"];
 
 function findSummary(lines: string[]) {
-  const summaryIndex = lines.findIndex((line) => summaryHeaderPattern.test(line));
+  const summaryIndex = lines.findIndex((line) => matchesAnyHeader(line, summaryHeaders));
   if (summaryIndex >= 0) return lines.slice(summaryIndex + 1, summaryIndex + 4).join(" ");
   return lines.filter((line) => !isSectionHeader(line) && !isBullet(line)).slice(0, 3).join(" ");
 }
 
 function inferExperience(lines: string[], experienceIndex: number) {
-  const section = sliceSection(lines, experienceIndex, /education|egitim|e\u011fitim|skills|yetenek|certifications|sertifika|licenses|lisanslar/i);
+  const section = sliceSection(lines, experienceIndex, ["education", "egitim", "e\u011fitim", "skills", "yetenek", "certifications", "sertifika", "licenses", "lisanslar"]);
   const bullets = section.filter(isBullet).map(cleanBullet).slice(0, 6);
   const header = section.find((line) => !isBullet(line) && !isSectionHeader(line)) ?? "";
   const period = header.match(/\b(19|20)\d{2}\b.*?(\b(19|20)\d{2}\b|present|current|devam)/i)?.[0] ?? "";
@@ -71,7 +72,7 @@ function inferExperience(lines: string[], experienceIndex: number) {
 }
 
 function inferEducation(lines: string[], educationIndex: number) {
-  const section = sliceSection(lines, educationIndex, /experience|deneyim|skills|yetenek|projects|projeler|certifications|sertifika/i);
+  const section = sliceSection(lines, educationIndex, ["experience", "deneyim", "skills", "yetenek", "projects", "projeler", "certifications", "sertifika"]);
   const line = section.find((item) => !isSectionHeader(item) && !isBullet(item)) ?? "";
   if (!line) return [];
   const period = line.match(/\b(19|20)\d{2}\b.*?(\b(19|20)\d{2}\b|present|current|devam)?/i)?.[0] ?? "";
@@ -80,11 +81,11 @@ function inferEducation(lines: string[], educationIndex: number) {
   return [{ id: "edu_imported", school, degree, period }];
 }
 
-function sliceSection(lines: string[], index: number, stopPattern: RegExp) {
+function sliceSection(lines: string[], index: number, stopHeaders: string[]) {
   const start = index >= 0 ? index + 1 : 0;
   const result: string[] = [];
   for (const line of lines.slice(start)) {
-    if (result.length > 0 && stopPattern.test(line)) break;
+    if (result.length > 0 && matchesAnyHeader(line, stopHeaders)) break;
     result.push(line);
   }
   return result.length ? result : lines;
@@ -99,27 +100,41 @@ function cleanBullet(line: string) {
 }
 
 function isSectionHeader(line: string) {
-  return new RegExp(`^(${[
-    "summary",
-    "profile",
-    "experience",
-    "education",
-    "skills",
-    "projects",
-    "certifications",
-    "deneyim",
-    "is deneyimi",
-    "i\u015f deneyimi",
-    "yetenekler",
-    "yetkinlikler",
-    "egitim",
-    "e\u011fitim",
-    "projeler",
-    "sertifikalar"
-  ].join("|")})$`, "i").test(line.trim());
+  return matchesAnyHeader(line, sectionHeaders);
 }
 
-export function cvToPlainText(profile: Profile, cv: Cv) {
+function matchesAnyHeader(line: string, headers: string[]) {
+  const normalized = toTurkishLower(line.trim());
+  return headers.some((header) => normalized === toTurkishLower(header) || includesTurkishInsensitive(normalized, header));
+}
+
+function removeKnownSkillHeader(line: string) {
+  let next = line;
+  for (const header of ["skills", "yetenekler", "yetenek", "tools"]) {
+    const lower = toTurkishLower(next);
+    const index = lower.indexOf(toTurkishLower(header));
+    if (index >= 0) next = `${next.slice(0, index)}${next.slice(index + header.length)}`;
+  }
+  return next;
+}
+
+const exportCopy = {
+  tr: {
+    summary: "\u00d6ZET",
+    skills: "YETENEKLER",
+    experience: "DENEY\u0130M",
+    education: "E\u011e\u0130T\u0130M"
+  },
+  en: {
+    summary: "SUMMARY",
+    skills: "SKILLS",
+    experience: "EXPERIENCE",
+    education: "EDUCATION"
+  }
+} as const;
+
+export function cvToPlainText(profile: Profile, cv: Cv, language: AppLanguage = "en") {
+  const labels = exportCopy[language] ?? exportCopy.en;
   const contact = [profile.email, profile.phone, profile.location, profile.links].filter(Boolean).join(" | ");
   const experience = cv.experience
     .map((item) =>
@@ -136,16 +151,16 @@ export function cvToPlainText(profile: Profile, cv: Cv) {
     profile.title,
     contact,
     "",
-    "SUMMARY",
+    labels.summary,
     cv.summary || profile.summary,
     "",
-    "SKILLS",
+    labels.skills,
     cv.skills.join(", "),
     "",
-    "EXPERIENCE",
+    labels.experience,
     experience,
     "",
-    "EDUCATION",
+    labels.education,
     education
   ]
     .filter((part) => part !== undefined)

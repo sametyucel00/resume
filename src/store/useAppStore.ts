@@ -230,9 +230,37 @@ function normalizeCv(cv: Cv): Cv {
           period: preserveUtf8(item.period)
         }))
       : [],
-    rawText: preserveUtf8(cv.rawText),
+    rawText: normalizeRawText(preserveUtf8(cv.rawText)),
     templateId: templateId === "ats-compact" || templateId === "ats-balanced" || templateId === "ats-spacious" || templateId === "human-focus" ? templateId : defaultData.cvs[0].templateId,
     spacingId,
     sectionOrder: Array.isArray(cv.sectionOrder) && cv.sectionOrder.length ? cv.sectionOrder : ["summary", "skills", "experience", "education"]
   };
+}
+
+function normalizeRawText(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") || !trimmed.includes('"summary"')) return value;
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      summary?: string;
+      skills?: string[];
+      experience?: Array<{ role?: string; company?: string; period?: string; bullets?: string[] }>;
+      notes?: string[];
+    };
+    const sections = [
+      parsed.summary ? `Özet\n${preserveUtf8(parsed.summary)}` : "",
+      Array.isArray(parsed.skills) && parsed.skills.length ? `Yetenekler\n${parsed.skills.map(preserveUtf8).join(", ")}` : "",
+      Array.isArray(parsed.experience) && parsed.experience.length
+        ? `Deneyim\n${parsed.experience.map((item) => {
+            const role = [item.role, item.company, item.period].map((part) => preserveUtf8(String(part ?? ""))).filter(Boolean).join(" | ");
+            const bullets = Array.isArray(item.bullets) ? item.bullets.map((bullet) => `- ${preserveUtf8(bullet)}`).join("\n") : "";
+            return [role, bullets].filter(Boolean).join("\n");
+          }).join("\n\n")}`
+        : "",
+      Array.isArray(parsed.notes) && parsed.notes.length ? `Notlar\n${parsed.notes.map((note) => `- ${preserveUtf8(note)}`).join("\n")}` : ""
+    ].filter(Boolean);
+    return sections.length ? sections.join("\n\n") : value;
+  } catch {
+    return value;
+  }
 }

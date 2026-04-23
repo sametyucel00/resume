@@ -20,17 +20,17 @@ const escapeHtml = (value: string) =>
 
 const sectionCopy = {
   tr: {
-    summary: "\u00d6zet",
-    skills: "Yetenekler",
-    education: "E\u011fitim",
-    experience: "Deneyim",
+    summary: "\u00d6ZET",
+    skills: "YETENEKLER",
+    education: "E\u011e\u0130T\u0130M",
+    experience: "DENEY\u0130M",
     yourName: "Ad\u0131n\u0131z"
   },
   en: {
-    summary: "Summary",
-    skills: "Skills",
-    education: "Education",
-    experience: "Experience",
+    summary: "SUMMARY",
+    skills: "SKILLS",
+    education: "EDUCATION",
+    experience: "EXPERIENCE",
     yourName: "Your Name"
   }
 } as const;
@@ -80,7 +80,7 @@ export function cvToHtml(profile: Profile, cv: Cv, language: AppLanguage = "en")
         body { color: #111827; font-family: ${font}; line-height: 1.42; unicode-bidi: plaintext; }
         header { border-bottom: ${human ? "2px solid #6366F1" : "1px solid #111827"}; padding-bottom: ${human ? spacing + 4 : 12}px; margin-bottom: ${human ? spacing + 8 : 18}px; }
         h1 { font-size: ${human ? 30 : 24}px; margin: 0 0 4px; letter-spacing: 0; }
-        h2 { font-size: ${human ? 11.5 : 13}px; margin: ${spacing + 10}px 0 ${Math.max(8, spacing - 1)}px; text-transform: uppercase; letter-spacing: 0; color: ${human ? "#4F46E5" : "#111827"}; }
+        h2 { font-size: ${human ? 11.5 : 13}px; margin: ${spacing + 10}px 0 ${Math.max(8, spacing - 1)}px; letter-spacing: 0; color: ${human ? "#4F46E5" : "#111827"}; }
         h3 { font-size: ${headingSize}px; margin: ${spacing}px 0 2px; }
         p { margin: 0 0 ${spacing}px; font-size: ${bodySize}px; line-height: ${bodyLine}px; }
         ul { margin: 6px 0 0 18px; padding: 0; }

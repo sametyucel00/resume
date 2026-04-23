@@ -114,7 +114,8 @@ function getFallbackOutput(task: AiTask) {
 }
 
 function normalizeByTask(task: AiTask, value: string) {
-  if (task === "profileSummary" || task === "rewriteBullets" || task === "organizeSkills" || task === "interviewAnswers") {
+  if (task === "rewriteBullets") return normalizeRewrittenBullets(value);
+  if (task === "profileSummary" || task === "organizeSkills" || task === "interviewAnswers") {
     const normalizedText = task === "profileSummary" ? sanitizeProfileSummary(value) : value;
     return splitLines(normalizedText).length ? normalizedText : "";
   }
@@ -123,6 +124,20 @@ function normalizeByTask(task: AiTask, value: string) {
   if (task === "atsCheck") return normalizeAtsReport(value);
   if (task === "interviewQuestions") return normalizeInterviewQuestions(value);
   return "";
+}
+
+function normalizeRewrittenBullets(value: string) {
+  const parsed = parseLooseJson<{ bullets?: unknown }>(value, {});
+  if (Array.isArray(parsed.bullets)) {
+    const bullets = stringArray(parsed.bullets).map(stripBulletPrefix).filter(Boolean);
+    return bullets.length ? bullets.map((bullet) => `- ${bullet}`).join("\n") : "";
+  }
+  if (typeof parsed.bullets === "string") {
+    const bullets = splitLines(parsed.bullets).map(stripBulletPrefix).filter(Boolean);
+    return bullets.length ? bullets.map((bullet) => `- ${bullet}`).join("\n") : "";
+  }
+  const bullets = splitLines(value).map(stripBulletPrefix).filter((line) => line && !looksLikeJsonNoise(line));
+  return bullets.length ? bullets.map((bullet) => `- ${bullet}`).join("\n") : "";
 }
 
 function normalizeJobAnalysis(value: string) {
@@ -151,8 +166,8 @@ function normalizeAtsReport(value: string) {
   const parsed = parseLooseJson<AtsReport>(value, {
     score: 68,
     strengths: [language === "tr" ? "\u004f\u006b\u0075\u006e\u0061\u0062\u0069\u006c\u0069\u0072 \u0069\u00e7\u0065\u0072\u0069\u006b" : "Readable content"],
-    fixes: splitLines(value).slice(0, 4),
-    missingKeywords: []
+    fixes: [language === "tr" ? "Deneyim maddelerini daha kısa ve sonuç odaklı yazın." : "Keep experience bullets shorter and outcome-oriented."],
+    missingKeywords: extractStringArrayFromJsonText(value, "missingKeywords")
   });
   return JSON.stringify({
     score: clamp(Number(parsed.score) || 0, 0, 100),
@@ -214,6 +229,21 @@ function stringArray(value: unknown) {
 
 function stringOrEmpty(value: unknown) {
   return preserveUtf8(String(value ?? "")).trim();
+}
+
+function stripBulletPrefix(value: string) {
+  return preserveUtf8(value).replace(/^[-*\u2022\d.)\s]+/, "").trim();
+}
+
+function looksLikeJsonNoise(value: string) {
+  const line = value.trim();
+  return line === "{" || line === "}" || line === "[" || line === "]" || /^"?(bullets|jobDescription|tone|language)"?\s*:/.test(line);
+}
+
+function extractStringArrayFromJsonText(value: string, key: string) {
+  const match = value.match(new RegExp(`"${key}"\\s*:\\s*\\[([\\s\\S]*?)\\]`, "i"));
+  if (!match) return [];
+  return [...match[1].matchAll(/"([^"]+)"/g)].map((item) => preserveUtf8(item[1]).trim()).filter(Boolean);
 }
 
 function sanitizeProfileSummary(value: string) {

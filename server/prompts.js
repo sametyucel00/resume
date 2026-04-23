@@ -40,7 +40,7 @@ const prompts = {
   }),
   rewriteBullets: (input) => ({
     system: systemFor(input),
-    user: `Rewrite these experience bullets. ${toneRule(input)} Keep them truthful, specific, and concise.\n\n${JSON.stringify(input, null, 2)}`
+    user: `Rewrite only the experience bullets from input.bullets. ${toneRule(input)} Keep them truthful, specific, and concise. Return only rewritten bullet lines, one per line. Do not return JSON, labels, explanations, jobDescription, tone, or language.\n\n${JSON.stringify(input, null, 2)}`
   }),
   organizeSkills: (input) => ({
     system: systemFor(input),
@@ -55,7 +55,7 @@ const prompts = {
     user: `Optimize this CV for the job. ${toneRule(input)} Return JSON with summary, skills, experience, notes. Experience must contain role, company, period, bullets. Keep claims realistic and do not invent metrics. Only include skills that materially support the target role. Notes should be short and action-oriented.\n\nCV:\n${JSON.stringify(input.cv, null, 2)}\n\nJOB:\n${input.jobDescription || ""}`
   }),
   atsCheck: (input) => ({
-    system: `${systemFor(input)} Return valid JSON only. Use Turkish JSON string values when language is tr; keep the JSON keys unchanged.`,
+    system: `${systemFor(input)} Return valid raw JSON only. Do not wrap JSON in markdown or code fences. Use Turkish JSON string values when language is tr; keep the JSON keys unchanged.`,
     user: `Run an ATS compatibility check. ${toneRule(input)} Return JSON with score number 0-100, strengths, fixes, missingKeywords, formattingIssues, riskyPhrases, actionItems. Base the score only on the supplied CV and job description. Keep fixes practical and specific.\n\nCV:\n${JSON.stringify(input.cv, null, 2)}\n\nJOB:\n${input.jobDescription || ""}`
   }),
   interviewQuestions: (input) => ({

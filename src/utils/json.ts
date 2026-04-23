@@ -1,9 +1,12 @@
 export function parseLooseJson<T>(value: string, fallback: T): T {
   const trimmed = value.trim();
+  const unfenced = stripMarkdownFence(trimmed);
   const candidates = [
     trimmed,
+    unfenced,
     extractBetween(trimmed, "{", "}"),
-    trimmed.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim()
+    extractBetween(unfenced, "{", "}"),
+    stripMarkdownFence(extractBetween(trimmed, "{", "}"))
   ].filter(Boolean);
 
   for (const candidate of candidates) {
@@ -15,6 +18,14 @@ export function parseLooseJson<T>(value: string, fallback: T): T {
   }
 
   return fallback;
+}
+
+function stripMarkdownFence(value: string) {
+  return value
+    .trim()
+    .replace(/^```[a-zA-Z0-9_-]*\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
 }
 
 function extractBetween(value: string, startChar: string, endChar: string) {

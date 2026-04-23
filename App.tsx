@@ -18,6 +18,7 @@ import { resolveApiBaseUrl } from "./src/config/runtime";
 import { t, tf } from "./src/i18n";
 
 type Step = "profile" | "cv" | "bullets" | "job" | "optimize" | "ats" | "export" | "interview" | "history" | "settings";
+type ApplyScope = "all" | "summary" | "skills" | "bullets";
 
 const hirviaIcon = require("./assets/branding/hirvia-icon-final.png");
 
@@ -461,7 +462,7 @@ function CvScreen({ next }: { next: () => void }) {
   const spendCredit = useAppStore((state) => state.spendCredit);
   const [selectedExperience, setSelectedExperience] = useState(0);
   const [selectedEducation, setSelectedEducation] = useState(0);
-  const [draft, setDraft] = useState(cv.rawText);
+  const [draft, setDraft] = useState(normalizeCvTextForEditing(cv.rawText));
   const [draftName, setDraftName] = useState(cv.name);
   const [draftSummary, setDraftSummary] = useState(cv.summary);
   const [draftSkills, setDraftSkills] = useState(cv.skills.join(", "));
@@ -478,7 +479,7 @@ function CvScreen({ next }: { next: () => void }) {
   useEffect(() => {
     const experience = cv.experience[selectedExperience] ?? cv.experience[0];
     const education = cv.education[selectedEducation] ?? cv.education[0];
-    setDraft(cv.rawText);
+    setDraft(normalizeCvTextForEditing(cv.rawText));
     setDraftName(localizeCvName(cv.name, language));
     setDraftSummary(cv.summary);
     setDraftSkills(cv.skills.join(", "));
@@ -660,7 +661,7 @@ function BulletScreen({ next }: { next: () => void }) {
       provider: settings.aiProvider,
       input: { bullets: source, jobDescription: settings.lastJobDescription, tone: settings.tone }
     });
-    const output = result.output;
+    const output = normalizeBulletOutput(result.output);
     setRewritten(output);
     addHistory({ type: "rewrite", title: t(language, "bullets_rewritten_history"), detail: output, ...aiHistoryMeta("rewriteBullets", result, source) });
     setMessage(result.status === "fallback" ? `${result.message} ${t(language, "credit_used_suffix")}` : t(language, "bullets_rewritten_done"));
@@ -668,13 +669,20 @@ function BulletScreen({ next }: { next: () => void }) {
   };
 
   const apply = () => {
-    const bullets = splitLines(rewritten || source)
+    const bullets = splitLines(normalizeBulletOutput(rewritten || source))
       .map(cleanBulletInput)
       .filter(Boolean);
+    if (!bullets.length) {
+      setMessage(language === "tr" ? "Uygulanacak deneyim maddesi bulunamadı." : "No experience bullets found to apply.");
+      return;
+    }
     const experience = cv.experience.length
       ? cv.experience.map((item, index) => (index === 0 ? { ...item, bullets } : item))
       : [{ id: shortId("exp"), company: "", role: "", period: "", bullets }];
     updateCv({ ...cv, experience, rawText: cv.rawText || bullets.map((item) => `- ${item}`).join("\n") });
+    setSource(bullets.join("\n"));
+    setRewritten("");
+    setMessage(language === "tr" ? "Deneyim maddeleri uygulandı." : "Experience bullets applied.");
   };
 
   return (
@@ -752,7 +760,7 @@ function OptimizeScreen({ next }: { next: () => void }) {
   const spendCredit = useAppStore((state) => state.spendCredit);
   const [output, setOutput] = useState("");
   const [draft, setDraft] = useState<OptimizedCvDraft | null>(null);
-  const [applyScope, setApplyScope] = useState<"all" | "summary" | "skills" | "bullets">("all");
+  const [applyScope, setApplyScope] = useState<ApplyScope>("all");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -793,9 +801,9 @@ function OptimizeScreen({ next }: { next: () => void }) {
       summary: applyScope === "all" || applyScope === "summary" ? draft.summary || cv.summary : cv.summary,
       skills: applyScope === "all" || applyScope === "skills" ? draft.skills?.length ? draft.skills : cv.skills : cv.skills,
       experience: applyScope === "all" || applyScope === "bullets" ? draft.experience?.length ? draft.experience.map((item, index) => ({ ...item, id: item.id || cv.experience[index]?.id || shortId("exp") })) : cv.experience : cv.experience,
-      rawText: output || cv.rawText
+      rawText: normalizeCvTextForEditing(cv.rawText)
     });
-    setMessage(tf(language, "changes_applied", { scope: applyScope }));
+    setMessage(tf(language, "changes_applied", { scope: getApplyScopeLabel(applyScope, language) }));
   };
 
   return (
@@ -805,8 +813,8 @@ function OptimizeScreen({ next }: { next: () => void }) {
       {loading ? <Skeleton lines={6} /> : draft ? (
         <>
           <OptimizationStats cv={cv} draft={draft} jobDescription={settings.lastJobDescription} />
-          <OptimizedPreview draft={draft} />
-          <Segmented options={[{ label: t(language, "optimize_all"), value: "all" }, { label: t(language, "optimize_summary"), value: "summary" }, { label: t(language, "optimize_skills"), value: "skills" }, { label: t(language, "optimize_bullets"), value: "bullets" }]} value={applyScope} onChange={setApplyScope} />
+          <Segmented<ApplyScope> options={[{ label: t(language, "optimize_all"), value: "all" }, { label: t(language, "optimize_summary"), value: "summary" }, { label: t(language, "optimize_skills"), value: "skills" }, { label: t(language, "optimize_bullets"), value: "bullets" }]} value={applyScope} onChange={setApplyScope} />
+          <OptimizedPreview draft={draft} scope={applyScope} />
         </>
       ) : <EmptyState text={t(language, "optimize_empty")} />}
       <ActionRow>
@@ -849,7 +857,12 @@ function AtsScreen({ next }: { next: () => void }) {
       input: { cv, jobDescription: settings.lastJobDescription, tone: settings.tone }
     });
     const output = result.output;
-    const parsed = parseLooseJson<AtsReport>(output, { score: 68, strengths: [language === "tr" ? "Okunabilir içerik" : "Readable content"], fixes: splitLines(output).slice(0, 4), missingKeywords: [] });
+    const parsed = parseLooseJson<AtsReport>(output, {
+      score: 68,
+      strengths: [language === "tr" ? "Okunabilir içerik" : "Readable content"],
+      fixes: [language === "tr" ? "Deneyim maddelerini daha kısa ve sonuç odaklı yazın." : "Keep experience bullets shorter and outcome-oriented."],
+      missingKeywords: extractJsonStringArray(output, "missingKeywords")
+    });
     setReport(enrichAtsReport(parsed, cv));
     addHistory({ type: "ats", title: t(language, "ats_checked_history"), detail: output, ...aiHistoryMeta("atsCheck", result, cv.name) });
     setMessage(result.status === "fallback" ? `${result.message} ${t(language, "credit_used_suffix")}` : t(language, "ats_check_complete"));
@@ -941,7 +954,6 @@ function ExportScreen({ next }: { next: () => void }) {
       <ChoiceRail<TemplateId> options={templateOptions} value={cv.templateId} onChange={(templateId) => updateCv({ ...cv, templateId })} />
       <Text style={styles.subheadCompact}>{t(language, "spacing_title")}</Text>
       <ChoiceRail<SpacingId> options={spacingOptions} value={cv.spacingId} onChange={(spacingId) => updateCv({ ...cv, spacingId })} />
-      {cv.mode === "ats" ? <SpacingPreview spacingId={cv.spacingId} /> : null}
       <Text style={styles.subheadCompact}>{t(language, "order_title")}</Text>
       <ChoiceRail options={orderOptions} value={cv.sectionOrder.join(",")} onChange={(value) => updateCv({ ...cv, sectionOrder: value.split(",") as CvSectionId[] })} />
       <ExportWarnings warnings={warnings} />
@@ -1073,9 +1085,11 @@ function CvPreviewContent({
 }
 
 function CvPreviewSection({ title, spacing, human, children }: { title: string; spacing: number; human: boolean; children: React.ReactNode }) {
+  const language = useAppStore((state) => state.settings.language);
+  const sectionTitle = title.toLocaleUpperCase(language === "tr" ? "tr-TR" : "en-US");
   return (
     <View style={[styles.cvSection, { paddingTop: Math.max(10, spacing + 2) }]}>
-      <Text style={[styles.cvSectionTitle, human && { fontSize: 11.5, color: colors.accent }, { marginBottom: Math.max(6, spacing - 2) }]}>{title}</Text>
+      <Text style={[styles.cvSectionTitle, human && { fontSize: 11.5, color: colors.accent }, { marginBottom: Math.max(6, spacing - 2) }]}>{sectionTitle}</Text>
       {children}
     </View>
   );
@@ -1085,41 +1099,6 @@ function getSpacingValue(spacingId: SpacingId) {
   if (spacingId === "compact") return 6;
   if (spacingId === "spacious") return 14;
   return 10;
-}
-
-function SpacingPreview({ spacingId }: { spacingId: SpacingId }) {
-  const language = useAppStore((state) => state.settings.language);
-  const selectedIndex = spacingId === "compact" ? 0 : spacingId === "balanced" ? 1 : 2;
-  return (
-    <View style={styles.spacingPreview}>
-      <Text style={styles.previewLabel}>{language === "tr" ? "Bo?luk ?nizlemesi" : "Spacing preview"}</Text>
-      <View style={styles.spacingPreviewRow}>
-        {(["compact", "balanced", "spacious"] as SpacingId[]).map((item, index) => {
-          const gap = item === "compact" ? 4 : item === "spacious" ? 10 : 7;
-          const active = index === selectedIndex;
-          return (
-            <View key={item} style={[styles.spacingPreviewCard, active && styles.spacingPreviewCardActive]}>
-              <View style={styles.spacingPreviewLineLg} />
-              <View style={[styles.spacingPreviewStack, { gap }]}>
-                <View style={styles.spacingPreviewLineSm} />
-                <View style={styles.spacingPreviewLineSm} />
-                <View style={[styles.spacingPreviewLineSm, styles.spacingPreviewLineShort]} />
-              </View>
-              <Text style={[styles.spacingPreviewCaption, active && styles.spacingPreviewCaptionActive]}>
-                {language === "tr"
-                  ? item === "compact"
-                    ? "S?k?"
-                    : item === "balanced"
-                      ? "Dengeli"
-                      : "Ferah"
-                  : item}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
-    </View>
-  );
 }
 
 function InterviewScreen() {
@@ -1389,7 +1368,7 @@ function SettingsScreen() {
       <Segmented options={[{ label: t(language, "direct"), value: "direct" }, { label: t(language, "executive"), value: "executive" }, { label: t(language, "technical"), value: "technical" }]} value={settings.tone} onChange={(tone) => updateSettings({ tone })} />
       <Text style={styles.mutedLine}>{t(language, "tone_help")}</Text>
       <View style={styles.tonePreviewBox}>
-        <Text style={styles.previewLabel}>{language === "tr" ? "Canl? ton ?nizlemesi" : "Live tone preview"}</Text>
+        <Text style={styles.previewLabel}>{language === "tr" ? "Canlı ton önizlemesi" : "Live tone preview"}</Text>
         {getTonePreview(settings.tone, language).map((line) => (
           <Text key={line} style={styles.tonePreviewText}>- {line}</Text>
         ))}
@@ -1517,19 +1496,23 @@ function InsightList({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-function OptimizedPreview({ draft }: { draft: OptimizedCvDraft }) {
+function OptimizedPreview({ draft, scope }: { draft: OptimizedCvDraft; scope: ApplyScope }) {
   const language = useAppStore((state) => state.settings.language);
   const firstExperience = draft.experience?.[0];
+  const showSummary = scope === "all" || scope === "summary";
+  const showSkills = scope === "all" || scope === "skills";
+  const showExperience = scope === "all" || scope === "bullets";
+  const showNotes = scope === "all";
   return (
     <View style={styles.previewBlock}>
-      {!!draft.summary && (
+      {showSummary && !!draft.summary && (
         <>
           <Text style={styles.previewLabel}>{t(language, "summary_section")}</Text>
           <Text style={styles.previewText}>{draft.summary}</Text>
         </>
       )}
-      <InsightList title={t(language, "skills_section")} items={draft.skills ?? []} />
-      {firstExperience ? (
+      {showSkills ? <InsightList title={t(language, "skills_section")} items={draft.skills ?? []} /> : null}
+      {showExperience && firstExperience ? (
         <View style={styles.insights}>
           {[firstExperience.role, firstExperience.company].filter(Boolean).length ? (
             <Text style={styles.insightTitle}>{[firstExperience.role, firstExperience.company].filter(Boolean).join(" | ")}</Text>
@@ -1539,13 +1522,74 @@ function OptimizedPreview({ draft }: { draft: OptimizedCvDraft }) {
           ))}
         </View>
       ) : null}
-      <InsightList title={t(language, "notes")} items={draft.notes ?? []} />
+      {showNotes ? <InsightList title={t(language, "notes")} items={draft.notes ?? []} /> : null}
     </View>
   );
 }
 
+function getApplyScopeLabel(scope: ApplyScope, language: AppLanguage) {
+  const tr: Record<ApplyScope, string> = {
+    all: "Tümü",
+    summary: "Özet",
+    skills: "Yetenekler",
+    bullets: "Deneyimler"
+  };
+  const en: Record<ApplyScope, string> = {
+    all: "All",
+    summary: "Summary",
+    skills: "Skills",
+    bullets: "Experience"
+  };
+  return language === "tr" ? tr[scope] : en[scope];
+}
+
 function cleanBulletInput(line: string) {
   return line.replace(/^[-*\d.)\s]+/, "").replace(/^\u2022\s*/, "").trim();
+}
+
+function normalizeBulletOutput(value: string) {
+  const parsed = parseLooseJson<{ bullets?: unknown }>(value, {});
+  if (Array.isArray(parsed.bullets)) {
+    return parsed.bullets.map((item) => cleanBulletInput(String(item))).filter(Boolean).join("\n");
+  }
+  if (typeof parsed.bullets === "string") {
+    return splitLines(parsed.bullets).map(cleanBulletInput).filter(Boolean).join("\n");
+  }
+  return splitLines(value)
+    .map(cleanBulletInput)
+    .filter((line) => line && !/^(bullets|jobDescription|tone|language)\s*:/i.test(line) && !["{", "}", "[", "]"].includes(line))
+    .join("\n");
+}
+
+function normalizeCvTextForEditing(value: string) {
+  const parsed = parseLooseJson<Partial<OptimizedCvDraft>>(value, {});
+  const hasStructuredCv =
+    typeof parsed.summary === "string" ||
+    Array.isArray(parsed.skills) ||
+    Array.isArray(parsed.experience) ||
+    Array.isArray(parsed.notes);
+  if (!hasStructuredCv) return value;
+
+  const sections = [
+    parsed.summary ? `Özet\n${parsed.summary}` : "",
+    Array.isArray(parsed.skills) && parsed.skills.length ? `Yetenekler\n${parsed.skills.join(", ")}` : "",
+    Array.isArray(parsed.experience) && parsed.experience.length
+      ? `Deneyim\n${parsed.experience.map((item) => {
+          const role = [item.role, item.company, item.period].filter(Boolean).join(" | ");
+          const bullets = Array.isArray(item.bullets) ? item.bullets.map((bullet) => `- ${bullet}`).join("\n") : "";
+          return [role, bullets].filter(Boolean).join("\n");
+        }).join("\n\n")}`
+      : "",
+    Array.isArray(parsed.notes) && parsed.notes.length ? `Notlar\n${parsed.notes.map((note) => `- ${note}`).join("\n")}` : ""
+  ].filter(Boolean);
+
+  return sections.join("\n\n");
+}
+
+function extractJsonStringArray(value: string, key: string) {
+  const match = value.match(new RegExp(`"${key}"\\s*:\\s*\\[([\\s\\S]*?)\\]`, "i"));
+  if (!match) return [];
+  return [...match[1].matchAll(/"([^"]+)"/g)].map((item) => item[1].trim()).filter(Boolean);
 }
 
 function OptimizationStats({ cv, draft, jobDescription }: { cv: Cv; draft: OptimizedCvDraft; jobDescription: string }) {
@@ -2261,60 +2305,6 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 6
   },
-  spacingPreview: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 4,
-    marginBottom: 6
-  },
-  spacingPreviewRow: {
-    flexDirection: "row",
-    gap: 8
-  },
-  spacingPreviewCard: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 8,
-    padding: 8,
-    backgroundColor: "#FCFDFE"
-  },
-  spacingPreviewCardActive: {
-    borderColor: colors.accent,
-    backgroundColor: "#EEF2FF"
-  },
-  spacingPreviewStack: {
-    marginTop: 8
-  },
-  spacingPreviewLineLg: {
-    height: 6,
-    borderRadius: 999,
-    backgroundColor: "#0F172A",
-    width: "68%"
-  },
-  spacingPreviewLineSm: {
-    height: 4,
-    borderRadius: 999,
-    backgroundColor: "#94A3B8",
-    width: "100%"
-  },
-  spacingPreviewLineShort: {
-    width: "74%"
-  },
-  spacingPreviewCaption: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: "700",
-    marginTop: 8,
-    textAlign: "center",
-    textTransform: "uppercase"
-  },
-  spacingPreviewCaptionActive: {
-    color: colors.accent
-  },
   choice: {
     minHeight: 42,
     borderRadius: 8,
@@ -2444,7 +2434,6 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 12,
     fontWeight: "800",
-    textTransform: "uppercase",
     letterSpacing: 0,
     marginBottom: 6
   },

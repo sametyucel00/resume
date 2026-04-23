@@ -1,4 +1,4 @@
-import { AiTask, AppLanguage, AtsReport, Experience, InterviewCategory, JobAnalysis, OptimizedCvDraft } from "../types";
+﻿import { AiTask, AppLanguage, AtsReport, Experience, InterviewCategory, JobAnalysis, OptimizedCvDraft } from "../types";
 import { parseLooseJson } from "../utils/json";
 import { clamp, preserveUtf8, splitCsv, splitLines } from "../utils/text";
 import { useAppStore } from "../store/useAppStore";
@@ -13,19 +13,52 @@ export type NormalizedAI = {
 
 const fallbackByTask: Record<AppLanguage, Record<AiTask, string>> = {
   tr: {
-      "profileSummary": "Sonuç odaklı, role uygun ve gerçekçi bir profesyonel özet. Deneyimi, güçlü yönleri ve başvuru hedefini net şekilde anlatır.",
-      "rewriteBullets": "- Sorumlulukları daha net ve sonuç odaklı ifade ettim.\n- Yapılan işi kapsam, aksiyon ve etki ilişkisiyle güçlendirdim.\n- Abartı eklemeden pratik çıktıları öne çıkardım.",
-      "organizeSkills": "Temel Yetkinlikler: İletişim, Analiz, Proje Takibi\nAraçlar: Excel, SQL, CRM\nGüçlü Yönler: Paydaş Yönetimi, Süreç İyileştirme",
-      "analyzeJob": "{\"title\":\"Hedef Rol\",\"company\":\"\",\"mustHave\":[\"İlgili deneyim\",\"Açık iletişim\",\"Sorumluluk alma\"],\"niceToHave\":[\"Sektör bilgisi\"],\"keywords\":[\"sonuç\",\"iş birliği\",\"analiz\"],\"risks\":[\"Özgeçmişte role uygun kanıtlar güçlendirilmeli\"]}",
-      "optimizeCv": "{\"summary\":\"Role uygun deneyim, güçlü yönler ve pratik etki üzerine kurulu net bir özet.\",\"skills\":[\"İletişim\",\"Analiz\",\"Süreç İyileştirme\"],\"experience\":[{\"id\":\"exp_optimized\",\"company\":\"\",\"role\":\"\",\"period\":\"\",\"bullets\":[\"Sorumlulukları pratik iş sonuçlarıyla ilişkilendirerek anlatımı güçlendirdi.\",\"Düzenli iletişim ve takip ile ekipler arası yürütmeyi destekledi.\"]}],\"notes\":[\"AI servisi kullanılamadığı için güvenli yerel taslak kullanıldı.\"]}",
-      "atsCheck": "{\"score\":72,\"strengths\":[\"Okunabilir yapı\",\"İlgili yetenekler mevcut\"],\"fixes\":[\"Eksik rol anahtar kelimelerini ekleyin\",\"Deneyim maddelerini daha ölçülebilir hale getirin\"],\"missingKeywords\":[\"liderlik\",\"raporlama\",\"süreç iyileştirme\"]}",
-      "interviewQuestions": "{\"categories\":[{\"title\":\"Behavioral\",\"items\":[\"Paydaşları ikna etmeniz gereken bir projeyi anlatır mısınız?\",\"Zaman baskısı altında bir süreci iyileştirdiğiniz bir örnek paylaşır mısınız?\"]},{\"title\":\"Technical\",\"items\":[\"Bu roldeki ana problemi çözmek için hangi araç veya yöntemleri kullanırsınız?\",\"Çalışmanızın ölçülebilir değer ürettiğini nasıl doğrularsınız?\"]},{\"title\":\"Role Fit\",\"items\":[\"Bu rol deneyiminiz için neden doğru bir sonraki adım?\",\"İş ilanının hangi bölümü son deneyiminizle en çok örtüşüyor?\"]}]}",
-      "interviewAnswers": "Kısa bir STAR yapısı kullanın: durum, görev, aksiyon, sonuç. Cevabı net, dürüst ve iş ilanıyla bağlantılı tutun."
+    profileSummary: "Sonuç odaklı, role uygun ve gerçekçi bir profesyonel özet. Deneyimi, güçlü yönleri ve başvuru hedefini net şekilde anlatır.",
+    rewriteBullets: "- Sorumlulukları daha net ve sonuç odaklı ifade ettim.\n- Yapılan işi kapsam, aksiyon ve etki ilişkisiyle güçlendirdim.\n- Abartı eklemeden pratik çıktıları öne çıkardım.",
+    organizeSkills: "Temel Yetkinlikler: İletişim, Analiz, Proje Takibi\nAraçlar: Excel, SQL, CRM\nGüçlü Yönler: Paydaş Yönetimi, Süreç İyileştirme",
+    analyzeJob: JSON.stringify({
+      title: "Hedef Rol",
+      company: "",
+      mustHave: ["İlgili deneyim", "Açık iletişim", "Sorumluluk alma"],
+      niceToHave: ["Sektör bilgisi"],
+      keywords: ["sonuç", "iş birliği", "analiz"],
+      risks: ["Özgeçmişte role uygun kanıtlar güçlendirilmeli"]
+    }),
+    optimizeCv: JSON.stringify({
+      summary: "Role uygun deneyim, güçlü yönler ve pratik etki üzerine kurulu net bir özet.",
+      skills: ["İletişim", "Analiz", "Süreç İyileştirme"],
+      experience: [
+        {
+          id: "exp_optimized",
+          company: "",
+          role: "",
+          period: "",
+          bullets: [
+            "Sorumlulukları pratik iş sonuçlarıyla ilişkilendirerek anlatımı güçlendirdi.",
+            "Düzenli iletişim ve takip ile ekipler arası yürütmeyi destekledi."
+          ]
+        }
+      ],
+      notes: ["AI servisi kullanılamadığı için güvenli yerel taslak kullanıldı."]
+    }),
+    atsCheck: JSON.stringify({
+      score: 72,
+      strengths: ["Okunabilir yapı", "İlgili yetenekler mevcut"],
+      fixes: ["Eksik rol anahtar kelimelerini ekleyin", "Deneyim maddelerini daha ölçülebilir hale getirin"],
+      missingKeywords: ["liderlik", "raporlama", "süreç iyileştirme"]
+    }),
+    interviewQuestions: JSON.stringify({
+      categories: [
+        { title: "Behavioral", items: ["Son deneyiminizde sorumluluğunuz neydi ve günlük iş akışınız nasıldı?", "Bir ekip arkadaşıyla veya paydaşla çalışırken süreci nasıl takip ettiniz?"] },
+        { title: "Technical", items: ["Bu rolde kullanmanız beklenen araç veya yöntemlerle hangi seviyede deneyiminiz var?", "Özgeçmişinizdeki en ilgili projeyi veya görevi nasıl yürüttünüz?"] },
+        { title: "Role Fit", items: ["Bu ilana başvurmanızın ana nedeni nedir?", "Deneyiminizin bu roldeki beklentilerle en çok örtüşen tarafı hangisi?"] }
+      ]
+    }),
+    interviewAnswers: "Kısa bir STAR yapısı kullanın: durum, görev, aksiyon, sonuç. Cevabı net, dürüst ve iş ilanıyla bağlantılı tutun."
   },
   en: {
     profileSummary: "Clear, practical professional summary focused on measurable outcomes, relevant strengths, and role fit.",
-    rewriteBullets:
-      "- Improved ownership, clarity, and delivery impact.\n- Reduced ambiguity by connecting action, scope, and result.\n- Highlighted practical outcomes without exaggeration.",
+    rewriteBullets: "- Improved ownership, clarity, and delivery impact.\n- Reduced ambiguity by connecting action, scope, and result.\n- Highlighted practical outcomes without exaggeration.",
     organizeSkills: "Core: Communication, Analysis, Project Delivery\nTools: Excel, SQL, CRM\nStrengths: Stakeholder Management, Process Improvement",
     analyzeJob: JSON.stringify({
       title: "Target Role",
@@ -69,9 +102,31 @@ const fallbackByTask: Record<AppLanguage, Record<AiTask, string>> = {
   }
 };
 
+const errorMessages: Record<AppLanguage, Record<AiTask, string>> = {
+  tr: {
+    profileSummary: "Özet üretimi şu anda kullanılamıyor. Güvenli bir yerel taslak kullanıldı.",
+    rewriteBullets: "Madde yeniden yazımı şu anda kullanılamıyor. Güvenli bir yerel taslak kullanıldı.",
+    organizeSkills: "Yetenek düzenleme şu anda kullanılamıyor. Güvenli bir yerel taslak kullanıldı.",
+    analyzeJob: "İş ilanı analizi şu anda kullanılamıyor. Güvenli bir yerel taslak kullanıldı.",
+    optimizeCv: "Özgeçmiş optimizasyonu şu anda kullanılamıyor. Güvenli bir yerel taslak kullanıldı.",
+    atsCheck: "ATS kontrolü şu anda kullanılamıyor. Güvenli bir yerel taslak kullanıldı.",
+    interviewQuestions: "Mülakat sorusu üretimi şu anda kullanılamıyor. Güvenli bir yerel taslak kullanıldı.",
+    interviewAnswers: "Mülakat cevabı üretimi şu anda kullanılamıyor. Güvenli bir yerel taslak kullanıldı."
+  },
+  en: {
+    profileSummary: "Summary generation is unavailable. A safe local fallback was used.",
+    rewriteBullets: "Bullet rewriting is unavailable. A safe local fallback was used.",
+    organizeSkills: "Skills organization is unavailable. A safe local fallback was used.",
+    analyzeJob: "Job analysis is unavailable. A safe local fallback was used.",
+    optimizeCv: "CV optimization is unavailable. A safe local fallback was used.",
+    atsCheck: "ATS check is unavailable. A safe local fallback was used.",
+    interviewQuestions: "Interview question generation is unavailable. A safe local fallback was used.",
+    interviewAnswers: "Interview answer generation is unavailable. A safe local fallback was used."
+  }
+};
+
 export function normalizeAIOutput(task: AiTask, raw: string): NormalizedAI {
   const clean = preserveUtf8(raw).trim();
-  const fallback = getFallbackOutput(task);
   if (!clean) return fallbackResult(task);
 
   const normalized = normalizeByTask(task, clean);
@@ -85,27 +140,7 @@ export function fallbackResult(task: AiTask): NormalizedAI {
 
 export function getAIErrorMessage(task: AiTask) {
   const language = useAppStore.getState().settings.language;
-  const trMessages: Record<AiTask, string> = {
-      "profileSummary": "Özet üretimi şu anda kullanılamıyor. Güvenli bir yerel taslak kullanıldı.",
-      "rewriteBullets": "Madde yeniden yazımı şu anda kullanılamıyor. Güvenli bir yerel taslak kullanıldı.",
-      "organizeSkills": "Yetenek düzenleme şu anda kullanılamıyor. Güvenli bir yerel taslak kullanıldı.",
-      "analyzeJob": "İş ilanı analizi şu anda kullanılamıyor. Güvenli bir yerel taslak kullanıldı.",
-      "optimizeCv": "Özgeçmiş optimizasyonu şu anda kullanılamıyor. Güvenli bir yerel taslak kullanıldı.",
-      "atsCheck": "ATS kontrolü şu anda kullanılamıyor. Güvenli bir yerel taslak kullanıldı.",
-      "interviewQuestions": "Mülakat sorusu üretimi şu anda kullanılamıyor. Güvenli bir yerel taslak kullanıldı.",
-      "interviewAnswers": "Mülakat cevabı üretimi şu anda kullanılamıyor. Güvenli bir yerel taslak kullanıldı."
-  };
-  const enMessages: Record<AiTask, string> = {
-    profileSummary: "Summary generation is unavailable. A safe local fallback was used.",
-    rewriteBullets: "Bullet rewriting is unavailable. A safe local fallback was used.",
-    organizeSkills: "Skills organization is unavailable. A safe local fallback was used.",
-    analyzeJob: "Job analysis is unavailable. A safe local fallback was used.",
-    optimizeCv: "CV optimization is unavailable. A safe local fallback was used.",
-    atsCheck: "ATS check is unavailable. A safe local fallback was used.",
-    interviewQuestions: "Interview question generation is unavailable. A safe local fallback was used.",
-    interviewAnswers: "Interview answer generation is unavailable. A safe local fallback was used."
-  };
-  return language === "tr" ? trMessages[task] : enMessages[task];
+  return errorMessages[language]?.[task] ?? errorMessages.en[task];
 }
 
 function getFallbackOutput(task: AiTask) {
@@ -143,7 +178,7 @@ function normalizeRewrittenBullets(value: string) {
 function normalizeJobAnalysis(value: string) {
   const language = useAppStore.getState().settings.language;
   const parsed = parseLooseJson<JobAnalysis>(value, {
-    title: language === "tr" ? "\u0048\u0065\u0064\u0065\u0066 \u0052\u006f\u006c" : "Target Role",
+    title: language === "tr" ? "Hedef Rol" : "Target Role",
     company: "",
     mustHave: splitLines(value).slice(0, 4),
     niceToHave: [],
@@ -165,7 +200,7 @@ function normalizeAtsReport(value: string) {
   const language = useAppStore.getState().settings.language;
   const parsed = parseLooseJson<AtsReport>(value, {
     score: 68,
-    strengths: [language === "tr" ? "\u004f\u006b\u0075\u006e\u0061\u0062\u0069\u006c\u0069\u0072 \u0069\u00e7\u0065\u0072\u0069\u006b" : "Readable content"],
+    strengths: [language === "tr" ? "Okunabilir içerik" : "Readable content"],
     fixes: [language === "tr" ? "Deneyim maddelerini daha kısa ve sonuç odaklı yazın." : "Keep experience bullets shorter and outcome-oriented."],
     missingKeywords: extractStringArrayFromJsonText(value, "missingKeywords")
   });
@@ -186,7 +221,7 @@ function normalizeOptimizedCv(value: string) {
     summary: value,
     skills: [],
     experience: [],
-    notes: [language === "tr" ? "\u0041\u0049 \u0079\u0061\u0070\u0131\u006c\u0061\u006e\u0064\u0131\u0072\u0131\u006c\u006d\u0131\u015f \u0076\u0065\u0072\u0069 \u0079\u0065\u0072\u0069\u006e\u0065 \u006d\u0065\u0074\u0069\u006e \u0064\u00f6\u006e\u0064\u00fc\u0072\u0064\u00fc." : "AI returned text instead of structured JSON."]
+    notes: [language === "tr" ? "AI yapılandırılmış veri yerine metin döndürdü." : "AI returned text instead of structured JSON."]
   });
   const experience = Array.isArray(parsed.experience) ? parsed.experience.map(normalizeExperience).filter(Boolean) as Experience[] : [];
   return JSON.stringify({
@@ -249,6 +284,6 @@ function extractStringArrayFromJsonText(value: string, key: string) {
 function sanitizeProfileSummary(value: string) {
   return preserveUtf8(value)
     .replace(/\s[-\u2013\u2014]\s+[^\n]{1,80}$/u, "")
-    .replace(/^(summary|profil \u00f6zeti|profile summary)\s*:\s*/iu, "")
+    .replace(/^(summary|profil özeti|profile summary)\s*:\s*/iu, "")
     .trim();
 }

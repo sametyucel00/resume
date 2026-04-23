@@ -48,23 +48,85 @@ const prompts = {
   }),
   analyzeJob: (input) => ({
     system: `${systemFor(input)} Return valid JSON only. Use Turkish JSON string values when language is tr; keep the JSON keys unchanged.`,
-    user: `Analyze this job description. ${toneRule(input)} Return JSON with title, company, mustHave, niceToHave, keywords, risks.\n\n${input.jobDescription || ""}`
+    user: `Analyze this job description. ${toneRule(input)}
+Return JSON with title, company, mustHave, niceToHave, keywords, risks.
+Rules:
+- Extract only requirements and terms that are actually present in the job text.
+- Do not add generic technology, leadership, cloud, security, or process terms unless the job explicitly mentions them.
+- Keep keywords to 6-10 concrete role terms.
+
+JOB SIGNALS:
+${JSON.stringify(input.jobSignals || {}, null, 2)}
+
+JOB:
+${input.jobDescription || ""}`
   }),
   optimizeCv: (input) => ({
     system: `${systemFor(input)} Return valid JSON only. Use Turkish JSON string values when language is tr; keep the JSON keys unchanged.`,
-    user: `Optimize this CV for the job. ${toneRule(input)} Return JSON with summary, skills, experience, notes. Experience must contain role, company, period, bullets. Keep claims realistic and do not invent metrics. Only include skills that materially support the target role. Notes should be short and action-oriented.\n\nCV:\n${JSON.stringify(input.cv, null, 2)}\n\nJOB:\n${input.jobDescription || ""}`
+    user: `Optimize this CV for the job. ${toneRule(input)}
+Return JSON with summary, skills, experience, notes. Experience must contain role, company, period, bullets.
+Strict rules:
+- Use JOB SIGNALS as the main target context.
+- Optimize only for requirements explicitly present in JOB or JOB SIGNALS.
+- Do not add skills, tools, industries, metrics, seniority, or achievements that are not supported by the CV.
+- If the CV does not prove a job requirement, mention it only as a note, not as a claim in the CV.
+- Notes must briefly explain which job requirement influenced the change.
+- Keep output realistic, direct, and application-ready.
+
+JOB SIGNALS:
+${JSON.stringify(input.jobSignals || {}, null, 2)}
+
+CV:
+${JSON.stringify(input.cv, null, 2)}
+
+JOB:
+${input.jobDescription || ""}`
   }),
   atsCheck: (input) => ({
     system: `${systemFor(input)} Return valid raw JSON only. Do not wrap JSON in markdown or code fences. Use Turkish JSON string values when language is tr; keep the JSON keys unchanged.`,
-    user: `Run an ATS compatibility check. ${toneRule(input)} Return JSON with score number 0-100, strengths, fixes, missingKeywords, formattingIssues, riskyPhrases, actionItems. Base the score only on the supplied CV and job description. Keep fixes practical and specific.\n\nCV:\n${JSON.stringify(input.cv, null, 2)}\n\nJOB:\n${input.jobDescription || ""}`
+    user: `Run an ATS compatibility check. ${toneRule(input)}
+Return JSON with score number 0-100, strengths, fixes, missingKeywords, formattingIssues, riskyPhrases, actionItems.
+Strict rules:
+- Base the report only on the supplied CV, JOB, and JOB SIGNALS.
+- missingKeywords must contain only terms that are explicitly present in JOB or JOB SIGNALS.
+- Do not suggest unrelated technologies, cloud/security terms, methods, or certifications.
+- Explain what is strong, what is missing, and what can be improved in practical language.
+- If job context is weak, say that the full job description is needed instead of inventing terms.
+
+JOB SIGNALS:
+${JSON.stringify(input.jobSignals || {}, null, 2)}
+
+CV:
+${JSON.stringify(input.cv, null, 2)}
+
+JOB:
+${input.jobDescription || ""}`
   }),
   interviewQuestions: (input) => ({
     system: `${systemFor(input)} Return valid JSON only. Use Turkish JSON string values when language is tr; keep category title values as Behavioral, Technical, or Role Fit for app mapping.`,
-    user: `Generate 6 realistic interview questions for this job and CV. ${toneRule(input)} Return JSON with categories: Behavioral, Technical, Role Fit. Each category must have an items array with 2 questions. Keep questions specific.\n\n${JSON.stringify(input, null, 2)}`
+    user: `Generate 6 realistic interview questions for this job and CV. ${toneRule(input)}
+Return JSON with categories: Behavioral, Technical, Role Fit. Each category must have exactly 2 items.
+Question style:
+- Realistic first or second interview questions a recruiter or hiring manager would ask.
+- No extreme case studies, trick questions, abstract strategy prompts, or overdramatic scenarios.
+- Questions should sound natural and short.
+- Tie questions to JOB SIGNALS and visible CV experience only.
+- For Turkish output, use natural Turkish interview wording.
+
+JOB SIGNALS:
+${JSON.stringify(input.jobSignals || {}, null, 2)}
+
+INPUT:
+${JSON.stringify(input, null, 2)}`
   }),
   interviewAnswers: (input) => ({
     system: systemFor(input),
-    user: `Create concise answer starters for these questions. ${toneRule(input)} Use grounded STAR-style notes, not scripts. Keep each answer to 3-5 sentences, stay faithful to the provided experience, and avoid invented details.\n\n${JSON.stringify(input, null, 2)}`
+    user: `Create concise answer starters or improve the current answer for these questions. ${toneRule(input)}
+Use natural interview language, not a stiff script.
+Keep each answer to 3-5 sentences, stay faithful to the provided experience, and avoid invented details.
+If a currentAnswer is provided, improve that answer directly.
+
+${JSON.stringify(input, null, 2)}`
   })
 };
 

@@ -11,9 +11,9 @@ import { pickCvDocument } from "./src/services/importer";
 import { creditProducts, ProductId, purchaseCredits, restorePurchases } from "./src/services/purchases";
 import { templates } from "./src/services/templates";
 import { selectActiveCv, useAppStore } from "./src/store/useAppStore";
-import { AiTask, AppLanguage, AtsReport, Cv, CvMode, CvSectionId, InterviewCategory, InterviewPack, JobAnalysis, OptimizedCvDraft, Profile, SpacingId, TemplateId } from "./src/types";
+import { AiTask, AppLanguage, AtsReport, Cv, CvMode, CvSectionId, HistoryItem, InterviewCategory, InterviewPack, JobAnalysis, OptimizedCvDraft, Profile, SpacingId, TemplateId } from "./src/types";
 import { parseLooseJson } from "./src/utils/json";
-import { splitCsv, splitLines, shortId, TURKISH_LOCALE } from "./src/utils/text";
+import { clamp, splitCsv, splitLines, shortId, TURKISH_LOCALE } from "./src/utils/text";
 import { resolveApiBaseUrl } from "./src/config/runtime";
 import { t, tf } from "./src/i18n";
 
@@ -644,6 +644,10 @@ function BulletScreen({ next }: { next: () => void }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
+  useEffect(() => {
+    if (!rewritten) setSource(initialBullets);
+  }, [cv.id, initialBullets, rewritten]);
+
   const rewrite = async () => {
     if (!source.trim()) return;
     if (settings.aiDataConsent !== true) {
@@ -682,7 +686,7 @@ function BulletScreen({ next }: { next: () => void }) {
     updateCv({ ...cv, experience, rawText: cv.rawText || bullets.map((item) => `- ${item}`).join("\n") });
     setSource(bullets.join("\n"));
     setRewritten("");
-    setMessage(language === "tr" ? "Deneyim maddeleri uygulandı." : "Experience bullets applied.");
+    setMessage(language === "tr" ? "Deneyim maddeleri uygulandı. Özgeçmiş sayfası ve dışa aktarım bu güncel maddeleri kullanır." : "Experience bullets applied. The CV page and export now use these updated bullets.");
   };
 
   return (
@@ -713,6 +717,10 @@ function JobScreen({ next }: { next: () => void }) {
   const [message, setMessage] = useState("");
 
   const analyze = async () => {
+    if (!settings.lastJobDescription.trim()) {
+      setMessage(language === "tr" ? "Analiz için önce iş ilanını yapıştırın." : "Paste a job description before analysis.");
+      return;
+    }
     if (settings.aiDataConsent !== true) {
       setMessage(t(language, "ai_consent_required"));
       return;
@@ -726,7 +734,7 @@ function JobScreen({ next }: { next: () => void }) {
       task: "analyzeJob",
       apiBaseUrl,
       provider: settings.aiProvider,
-      input: { jobDescription: settings.lastJobDescription, tone: settings.tone }
+      input: { jobDescription: settings.lastJobDescription, jobSignals: extractJobSignals(settings.lastJobDescription), tone: settings.tone }
     });
     const output = result.output;
     setAnalysis(parseLooseJson<JobAnalysis>(output, { title: t(language, "target_role"), company: "", mustHave: splitLines(output).slice(0, 4), niceToHave: [], keywords: [], risks: [] }));
@@ -765,6 +773,10 @@ function OptimizeScreen({ next }: { next: () => void }) {
   const [message, setMessage] = useState("");
 
   const optimize = async () => {
+    if (!settings.lastJobDescription.trim()) {
+      setMessage(language === "tr" ? "Önce İş İlanı sayfasına hedef ilanı ekleyin. Optimizasyon ilana göre çalışır." : "Add the target job description first. Optimization depends on the job.");
+      return;
+    }
     if (settings.aiDataConsent !== true) {
       setMessage(t(language, "ai_consent_required"));
       return;
@@ -778,7 +790,7 @@ function OptimizeScreen({ next }: { next: () => void }) {
       task: "optimizeCv",
       apiBaseUrl,
       provider: settings.aiProvider,
-      input: { cv, jobDescription: settings.lastJobDescription, tone: settings.tone }
+      input: { cv, jobDescription: settings.lastJobDescription, jobSignals: extractJobSignals(settings.lastJobDescription), tone: settings.tone }
     });
     const response = result.output;
     const parsed = parseLooseJson<OptimizedCvDraft>(response, {
@@ -841,6 +853,10 @@ function AtsScreen({ next }: { next: () => void }) {
   const [message, setMessage] = useState("");
 
   const run = async () => {
+    if (!settings.lastJobDescription.trim()) {
+      setMessage(language === "tr" ? "Önce İş İlanı sayfasına hedef ilanı ekleyin. ATS kontrolü özgeçmişi bu ilana göre karşılaştırır." : "Add the target job first. The ATS check compares the CV against that job.");
+      return;
+    }
     if (settings.aiDataConsent !== true) {
       setMessage(t(language, "ai_consent_required"));
       return;
@@ -854,7 +870,7 @@ function AtsScreen({ next }: { next: () => void }) {
       task: "atsCheck",
       apiBaseUrl,
       provider: settings.aiProvider,
-      input: { cv, jobDescription: settings.lastJobDescription, tone: settings.tone }
+      input: { cv, jobDescription: settings.lastJobDescription, jobSignals: extractJobSignals(settings.lastJobDescription), tone: settings.tone }
     });
     const output = result.output;
     const parsed = parseLooseJson<AtsReport>(output, {
@@ -863,8 +879,14 @@ function AtsScreen({ next }: { next: () => void }) {
       fixes: [language === "tr" ? "Deneyim maddelerini daha kısa ve sonuç odaklı yazın." : "Keep experience bullets shorter and outcome-oriented."],
       missingKeywords: extractJsonStringArray(output, "missingKeywords")
     });
-    setReport(enrichAtsReport(parsed, cv));
-    addHistory({ type: "ats", title: t(language, "ats_checked_history"), detail: output, ...aiHistoryMeta("atsCheck", result, cv.name) });
+    const enrichedReport = enrichAtsReport(parsed, cv, settings.lastJobDescription);
+    setReport(enrichedReport);
+    addHistory({
+      type: "ats",
+      title: t(language, "ats_checked_history"),
+      detail: JSON.stringify(enrichedReport),
+      ...aiHistoryMeta("atsCheck", { ...result, output: JSON.stringify(enrichedReport) }, cv.name)
+    });
     setMessage(result.status === "fallback" ? `${result.message} ${t(language, "credit_used_suffix")}` : t(language, "ats_check_complete"));
     setLoading(false);
   };
@@ -951,7 +973,7 @@ function ExportScreen({ next }: { next: () => void }) {
       <Text style={styles.mutedLine}>{t(language, "ats_help")}</Text>
       <View style={{ height: 12 }} />
       <Text style={styles.subheadCompact}>{t(language, "template_title")}</Text>
-      <ChoiceRail<TemplateId> options={templateOptions} value={cv.templateId} onChange={(templateId) => updateCv({ ...cv, templateId })} />
+      <ChoiceRail<TemplateId> options={templateOptions} value={cv.templateId} onChange={(templateId) => updateCv({ ...cv, templateId, spacingId: spacingForTemplate(templateId) })} />
       <Text style={styles.subheadCompact}>{t(language, "spacing_title")}</Text>
       <ChoiceRail<SpacingId> options={spacingOptions} value={cv.spacingId} onChange={(spacingId) => updateCv({ ...cv, spacingId })} />
       <Text style={styles.subheadCompact}>{t(language, "order_title")}</Text>
@@ -1101,6 +1123,12 @@ function getSpacingValue(spacingId: SpacingId) {
   return 10;
 }
 
+function spacingForTemplate(templateId: TemplateId): SpacingId {
+  if (templateId === "ats-compact") return "compact";
+  if (templateId === "ats-spacious") return "spacious";
+  return "balanced";
+}
+
 function InterviewScreen() {
   const cv = useActiveCv();
   const settings = useAppStore((state) => state.settings);
@@ -1112,12 +1140,13 @@ function InterviewScreen() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [selectedPair, setSelectedPair] = useState(0);
-  const [starSituation, setStarSituation] = useState("");
-  const [starTask, setStarTask] = useState("");
-  const [starAction, setStarAction] = useState("");
-  const [starResult, setStarResult] = useState("");
+  const [answerDraft, setAnswerDraft] = useState("");
 
   const generate = async () => {
+    if (!settings.lastJobDescription.trim()) {
+      setMessage(language === "tr" ? "Önce İş İlanı sayfasına hedef ilanı ekleyin. Mülakat hazırlığı ilan ve özgeçmiş birlikteyken anlamlı çalışır." : "Add the target job first. Interview prep works best with both job and CV context.");
+      return;
+    }
     if (settings.aiDataConsent !== true) {
       setMessage(t(language, "ai_consent_required"));
       return;
@@ -1131,7 +1160,7 @@ function InterviewScreen() {
       task: "interviewQuestions",
       apiBaseUrl,
       provider: settings.aiProvider,
-      input: { cv, jobDescription: settings.lastJobDescription, tone: settings.tone }
+      input: { cv, jobDescription: settings.lastJobDescription, jobSignals: extractJobSignals(settings.lastJobDescription), tone: settings.tone }
     });
     const questions = questionResult.output;
     const parsedQuestions = parseLooseJson<{ categories: InterviewCategory[] }>(questions, {
@@ -1142,7 +1171,7 @@ function InterviewScreen() {
       task: "interviewAnswers",
       apiBaseUrl,
       provider: settings.aiProvider,
-      input: { questions: flatQuestions, cv, jobDescription: settings.lastJobDescription, tone: settings.tone }
+      input: { questions: flatQuestions, cv, jobDescription: settings.lastJobDescription, jobSignals: extractJobSignals(settings.lastJobDescription), tone: settings.tone }
     });
     const answers = answerResult.output;
     const answerLines = splitLines(answers);
@@ -1152,7 +1181,8 @@ function InterviewScreen() {
       answer: answerLines[index] ?? answerLines[0] ?? ""
     }));
     setPack({ categories: parsedQuestions.categories, answers: answerLines, qaPairs });
-    setSelectedPair(0);
+    setSelectedPair(getFirstInterviewQuestionIndex(qaPairs));
+    setAnswerDraft("");
     addHistory({ type: "interview", title: t(language, "interview_pack_history"), detail: `${questions}\n\n${answers}`, ...aiHistoryMeta("interviewQuestions", questionResult, cv.name) });
     setMessage(questionResult.status === "fallback" || answerResult.status === "fallback" ? t(language, "interview_prep_fallback") : t(language, "interview_prep_generated"));
     setLoading(false);
@@ -1170,46 +1200,52 @@ function InterviewScreen() {
     }
     setLoading(true);
     const pair = pack.qaPairs[selectedPair];
-    const starDraft = buildStarDraft(starSituation, starTask, starAction, starResult);
     const result = await generateAIResult({
       task: "interviewAnswers",
       apiBaseUrl,
       provider: settings.aiProvider,
       input: {
         questions: [pair.question],
-        currentAnswer: pair.answer,
-        starDraft,
+        currentAnswer: answerDraft || pair.answer,
         cv,
         jobDescription: settings.lastJobDescription,
+        jobSignals: extractJobSignals(settings.lastJobDescription),
         tone: settings.tone
       }
     });
     const improved = splitLines(result.output)[0] ?? result.output;
     const qaPairs = pack.qaPairs.map((item, index) => (index === selectedPair ? { ...item, answer: improved } : item));
     setPack({ ...pack, qaPairs, answers: qaPairs.map((item) => item.answer) });
+    setAnswerDraft(improved);
     setMessage(result.status === "fallback" ? `${result.message} ${t(language, "credit_used_suffix")}` : t(language, "answer_improved"));
     addHistory({ type: "interview", title: t(language, "interview_answer_improved_history"), detail: improved, ...aiHistoryMeta("interviewAnswers", result, pair.question) });
     setLoading(false);
   };
+
+  const orderedPairs = pack ? getOrderedInterviewPairs(pack) : [];
+  const selectedOrderedPair = orderedPairs.find((item) => item.originalIndex === selectedPair) ?? orderedPairs[0];
 
   return (
     <Section>
       <Title title={t(language, "interview_title")} subtitle={t(language, "interview_subtitle")} />
       {loading ? <Skeleton lines={6} /> : pack ? (
         <>
-          {pack.categories.map((category) => <InsightList key={category.title} title={localizeInterviewCategory(category.title, language)} items={category.items} />)}
+          <InsightList title={language === "tr" ? "Bu ilanda sorulabilecek sorular" : "Questions likely for this job"} items={getInterviewQuestionItemsByGroup(orderedPairs, "job")} />
+          <InsightList title={language === "tr" ? "CV’ne göre gelebilecek sorular" : "Questions based on your CV"} items={getInterviewQuestionItemsByGroup(orderedPairs, "cv")} />
           {pack.qaPairs?.length ? (
             <>
-              <Text style={styles.subheadCompact}>{t(language, "answer_pair")}</Text>
-              <ChoiceRail options={pack.qaPairs.map((pair, index) => ({ label: `${index + 1}`, value: String(index) }))} value={String(selectedPair)} onChange={(value) => setSelectedPair(Number(value))} />
-              <InterviewAnswerCard pair={pack.qaPairs[selectedPair]} />
-              <Text style={styles.subheadCompact}>{t(language, "star_notes")}</Text>
-              <Field label={t(language, "situation")} value={starSituation} onChangeText={setStarSituation} multiline placeholder={t(language, "star_situation_placeholder")} />
-              <Field label={t(language, "task")} value={starTask} onChangeText={setStarTask} multiline placeholder={t(language, "star_task_placeholder")} />
-              <Field label={t(language, "action")} value={starAction} onChangeText={setStarAction} multiline placeholder={t(language, "star_action_placeholder")} />
-              <Field label={t(language, "result")} value={starResult} onChangeText={setStarResult} multiline placeholder={t(language, "star_result_placeholder")} />
+              <Text style={styles.subheadCompact}>{language === "tr" ? "Örnek cevap oluştur" : "Create a sample answer"}</Text>
+              <QuestionGrid
+                items={orderedPairs}
+                selectedIndex={selectedOrderedPair?.originalIndex ?? selectedPair}
+                onSelect={setSelectedPair}
+              />
+              <InterviewAnswerCard pair={pack.qaPairs[selectedPair]} displayIndex={selectedOrderedPair?.displayIndex} />
+              <Text style={styles.subheadCompact}>{language === "tr" ? "Cevabımı değerlendir" : "Review my answer"}</Text>
+              <Text style={styles.mutedLine}>{language === "tr" ? "Cevabını yapıştır, daha net ve role uygun hale getirelim." : "Paste your answer and make it clearer and more relevant to the role."}</Text>
+              <Field label={language === "tr" ? "Cevabım" : "My answer"} value={answerDraft} onChangeText={setAnswerDraft} multiline placeholder={language === "tr" ? "Kendi cevabını buraya yapıştır." : "Paste your answer here."} />
               <ActionRow>
-                <Button label={t(language, "improve")} onPress={improveAnswer} variant="secondary" />
+                <Button label={language === "tr" ? "Cevabımı Değerlendir" : "Review Answer"} onPress={improveAnswer} variant="secondary" />
                 <Button label={t(language, "copy")} onPress={() => copyText(pack.qaPairs?.[selectedPair]?.answer || "").then(setMessage)} variant="ghost" />
               </ActionRow>
             </>
@@ -1225,13 +1261,50 @@ function InterviewScreen() {
   );
 }
 
-function InterviewAnswerCard({ pair }: { pair?: { category: InterviewCategory["title"]; question: string; answer: string } }) {
+type OrderedInterviewPair = {
+  originalIndex: number;
+  displayIndex: number;
+  category: InterviewCategory["title"];
+  question: string;
+  answer: string;
+};
+
+function QuestionGrid({
+  items,
+  selectedIndex,
+  onSelect
+}: {
+  items: OrderedInterviewPair[];
+  selectedIndex: number;
+  onSelect: (index: number) => void;
+}) {
+  return (
+    <View style={styles.questionGrid}>
+      {items.map((item) => {
+        const selected = item.originalIndex === selectedIndex;
+        return (
+          <Pressable
+            key={`${item.originalIndex}_${item.question}`}
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+            onPress={() => onSelect(item.originalIndex)}
+            style={[styles.questionGridButton, selected && styles.questionGridButtonActive]}
+          >
+            <Text style={[styles.questionGridText, selected && styles.questionGridTextActive]}>{item.displayIndex}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function InterviewAnswerCard({ pair, displayIndex }: { pair?: { category: InterviewCategory["title"]; question: string; answer: string }; displayIndex?: number }) {
   const language = useAppStore((state) => state.settings.language);
   if (!pair) return null;
   return (
     <View style={[styles.answerCard, styles.answerCardCompact]}>
       <Text style={styles.previewLabel}>{localizeInterviewCategory(pair.category, language)}</Text>
-      <Text style={styles.historyTitle}>{pair.question}</Text>
+      <Text style={styles.historyTitle}>{displayIndex ? `${displayIndex}. ${pair.question}` : pair.question}</Text>
       <Text style={styles.previewText}>{pair.answer}</Text>
     </View>
   );
@@ -1251,6 +1324,32 @@ function localizeInterviewCategory(category: InterviewCategory["title"], languag
   return t(language, "role_fit");
 }
 
+function getFirstInterviewQuestionIndex(pairs: { category: InterviewCategory["title"] }[]) {
+  const firstJobQuestion = pairs.findIndex((pair) => pair.category === "Technical" || pair.category === "Role Fit");
+  return firstJobQuestion >= 0 ? firstJobQuestion : 0;
+}
+
+function getOrderedInterviewPairs(pack: InterviewPack): OrderedInterviewPair[] {
+  const pairs = pack.qaPairs?.length
+    ? pack.qaPairs
+    : (pack.categories ?? []).flatMap((category) => category.items.map((question) => ({ category: category.title, question, answer: "" })));
+  const withOriginalIndex = pairs.map((pair, originalIndex) => ({ ...pair, originalIndex }));
+  const ordered = [
+    ...withOriginalIndex.filter((pair) => pair.category === "Technical" || pair.category === "Role Fit"),
+    ...withOriginalIndex.filter((pair) => pair.category === "Behavioral")
+  ];
+  return ordered.map((pair, index) => ({ ...pair, displayIndex: index + 1 }));
+}
+
+function getInterviewQuestionItemsByGroup(pairs: OrderedInterviewPair[], group: "job" | "cv") {
+  const wanted = group === "job" ? ["Technical", "Role Fit"] : ["Behavioral"];
+  const items = pairs
+    .filter((pair) => wanted.includes(pair.category))
+    .map((pair) => `${pair.displayIndex}. ${pair.question}`);
+  if (items.length) return items;
+  return pairs.map((pair) => `${pair.displayIndex}. ${pair.question}`).slice(0, 4);
+}
+
 function AiCostHint() {
   const credits = useAppStore((state) => state.settings.credits);
   const language = useAppStore((state) => state.settings.language);
@@ -1263,6 +1362,80 @@ function AiCostHint() {
   );
 }
 
+const knownJobTerms = [
+  "React Native", "React", "TypeScript", "JavaScript", "Node.js", "Express", "Fastify", "Expo", "Next.js", "Vue", "Angular",
+  "Python", "Java", "C#", ".NET", "PHP", "Laravel", "Go", "Golang", "Swift", "Kotlin",
+  "SQL", "PostgreSQL", "MySQL", "MongoDB", "Redis", "GraphQL", "REST API", "API", "Docker", "Kubernetes",
+  "AWS", "Azure", "Google Cloud", "GCP", "CI/CD", "DevOps", "Microservices", "Mikroservis", "Cloud", "Bulut",
+  "HTML", "CSS", "Tailwind", "Figma", "UI", "UX", "SEO", "Google Ads", "Meta Business Suite", "WordPress",
+  "Agile", "Scrum", "Kanban", "Jira", "ürün yönetimi", "proje yönetimi", "paydaş yönetimi", "performans analizi",
+  "veri analizi", "raporlama", "içerik stratejisi", "topluluk yönetimi", "teknik yazarlık", "yapay zeka", "AI"
+];
+
+function extractJobSignals(jobDescription: string) {
+  const text = collapseText(jobDescription);
+  const lowerText = text.toLocaleLowerCase(TURKISH_LOCALE);
+  const keywords = uniqueStrings([
+    ...knownJobTerms.filter((term) => lowerText.includes(term.toLocaleLowerCase(TURKISH_LOCALE))),
+    ...extractExplicitJobPhrases(jobDescription)
+  ]).slice(0, 18);
+  const mustHave = extractRequirementLines(jobDescription).slice(0, 6);
+  const role = extractTargetRole(jobDescription);
+  return { role, keywords, mustHave };
+}
+
+function extractExplicitJobPhrases(jobDescription: string) {
+  const phrases = new Set<string>();
+  const techPattern = /\b([A-Z][A-Za-z0-9+#.]{1,}(?:\s+[A-Z][A-Za-z0-9+#.]{1,}){0,2})\b/g;
+  for (const match of jobDescription.matchAll(techPattern)) {
+    const phrase = match[1].trim();
+    if (phrase.length >= 3 && !/^(We|The|And|This|Our|You|Job|About|Responsibilities|Requirements)$/i.test(phrase)) {
+      phrases.add(phrase);
+    }
+  }
+  return [...phrases].slice(0, 8);
+}
+
+function extractRequirementLines(jobDescription: string) {
+  return splitLines(jobDescription)
+    .map((line) => line.replace(/^[-*•\d.)\s]+/, "").trim())
+    .filter((line) => line.length >= 18 && line.length <= 180)
+    .filter((line) => /deneyim|bilgi|hakim|aran|beklen|required|requirement|experience|knowledge|familiar|proficient|responsib/i.test(line))
+    .slice(0, 8);
+}
+
+function extractTargetRole(jobDescription: string) {
+  const firstMeaningful = splitLines(jobDescription).find((line) => line.trim().length > 4 && line.trim().length < 90) ?? "";
+  const roleMatch = firstMeaningful.match(/([A-Za-zÇĞİÖŞÜçğıöşü .+-]*(developer|engineer|manager|specialist|uzman|geliştirici|mühendis|yönetici|analist)[A-Za-zÇĞİÖŞÜçğıöşü .+-]*)/i);
+  return collapseText(roleMatch?.[1] || firstMeaningful).slice(0, 90);
+}
+
+function getJobKeywords(jobDescription: string) {
+  return extractJobSignals(jobDescription).keywords;
+}
+
+function getCvSearchText(cv: Cv, profile?: Profile) {
+  return [
+    profile?.fullName,
+    profile?.title,
+    profile?.summary,
+    cv.name,
+    cv.summary,
+    cv.rawText,
+    cv.skills.join(" "),
+    cv.experience.map((item) => [item.role, item.company, item.period, item.bullets.join(" ")].join(" ")).join(" "),
+    cv.education.map((item) => [item.degree, item.school, item.period].join(" ")).join(" ")
+  ].filter(Boolean).join(" ").toLocaleLowerCase(TURKISH_LOCALE);
+}
+
+function getKeywordMatch(jobDescription: string, cv: Cv, profile?: Profile) {
+  const keywords = getJobKeywords(jobDescription);
+  const haystack = getCvSearchText(cv, profile);
+  const aligned = keywords.filter((keyword) => haystack.includes(keyword.toLocaleLowerCase(TURKISH_LOCALE)));
+  const missing = keywords.filter((keyword) => !aligned.includes(keyword));
+  return { keywords, aligned, missing, coverage: keywords.length ? Math.round((aligned.length / keywords.length) * 100) : 0 };
+}
+
 function aiHistoryMeta(task: AiTask, result: AiResult, input: string) {
   return {
     task,
@@ -1272,6 +1445,118 @@ function aiHistoryMeta(task: AiTask, result: AiResult, input: string) {
     outputSummary: result.output.slice(0, 180),
     status: result.status
   };
+}
+
+function formatHistoryDetail(item: HistoryItem, language: AppLanguage) {
+  const rawDetail = collapseText(item.detail || item.outputSummary || "");
+  if (!looksLikeJson(rawDetail)) return rawDetail;
+
+  const parsed = parseLooseJson<unknown>(rawDetail, null);
+  if (!parsed || typeof parsed !== "object") {
+    return language === "tr" ? "Yapılandırılmış çıktı kaydedildi." : "Structured output saved.";
+  }
+
+  if (item.type === "ats" || hasKeys(parsed, ["score", "missingKeywords", "fixes"])) {
+    return summarizeAtsHistory(parsed, language);
+  }
+
+  if (item.type === "optimize" || hasKeys(parsed, ["summary", "skills", "experience", "notes"])) {
+    return summarizeOptimizedHistory(parsed, language);
+  }
+
+  if (item.type === "interview" || hasKeys(parsed, ["categories", "answers", "qaPairs"])) {
+    return summarizeInterviewHistory(parsed, language);
+  }
+
+  if (item.type === "job" || hasKeys(parsed, ["title", "mustHave", "keywords", "risks"])) {
+    return summarizeJobHistory(parsed, language);
+  }
+
+  return language === "tr" ? "Yapılandırılmış çıktı kaydedildi." : "Structured output saved.";
+}
+
+function collapseText(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function clipText(value: string, maxLength = 220) {
+  const clean = collapseText(value);
+  return clean.length > maxLength ? `${clean.slice(0, maxLength - 1).trim()}…` : clean;
+}
+
+function looksLikeJson(value: string) {
+  const first = value.trim()[0];
+  return first === "{" || first === "[";
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function hasKeys(value: unknown, keys: string[]) {
+  const record = asRecord(value);
+  return keys.some((key) => key in record);
+}
+
+function stringArray(value: unknown) {
+  return Array.isArray(value) ? value.map((item) => collapseText(String(item))).filter(Boolean) : [];
+}
+
+function summarizeAtsHistory(value: unknown, language: AppLanguage) {
+  const report = asRecord(value);
+  const score = typeof report.score === "number" ? report.score : Number(report.score);
+  const missing = stringArray(report.missingKeywords).slice(0, 4);
+  const fixes = stringArray(report.fixes).slice(0, 1);
+  const strengths = stringArray(report.strengths).slice(0, 1);
+  const parts = [
+    Number.isFinite(score) ? (language === "tr" ? `Skor ${score}` : `Score ${score}`) : "",
+    missing.length ? (language === "tr" ? `Eksik terimler: ${missing.join(", ")}` : `Missing keywords: ${missing.join(", ")}`) : "",
+    fixes.length ? (language === "tr" ? `İlk düzeltme: ${fixes[0]}` : `First fix: ${fixes[0]}`) : "",
+    !fixes.length && strengths.length ? (language === "tr" ? `Güçlü yön: ${strengths[0]}` : `Strength: ${strengths[0]}`) : ""
+  ].filter(Boolean);
+  return clipText(parts.join(". "));
+}
+
+function summarizeOptimizedHistory(value: unknown, language: AppLanguage) {
+  const draft = asRecord(value);
+  const summary = typeof draft.summary === "string" ? draft.summary : "";
+  const skills = stringArray(draft.skills).slice(0, 4);
+  const experience = Array.isArray(draft.experience) ? draft.experience.map(asRecord) : [];
+  const firstBullets = experience.flatMap((item) => stringArray(item.bullets)).slice(0, 1);
+  const parts = [
+    summary ? (language === "tr" ? `Özet: ${summary}` : `Summary: ${summary}`) : "",
+    skills.length ? (language === "tr" ? `Yetenekler: ${skills.join(", ")}` : `Skills: ${skills.join(", ")}`) : "",
+    firstBullets.length ? (language === "tr" ? `Deneyim: ${firstBullets[0]}` : `Experience: ${firstBullets[0]}`) : ""
+  ].filter(Boolean);
+  return clipText(parts.join(". "));
+}
+
+function summarizeInterviewHistory(value: unknown, language: AppLanguage) {
+  const pack = asRecord(value);
+  const categories = Array.isArray(pack.categories) ? pack.categories.map(asRecord) : [];
+  const questions = categories.flatMap((category) => stringArray(category.items));
+  const qaPairs = Array.isArray(pack.qaPairs) ? pack.qaPairs.map(asRecord) : [];
+  const pairQuestions = qaPairs.map((pair) => typeof pair.question === "string" ? pair.question : "").filter(Boolean);
+  const allQuestions = [...questions, ...pairQuestions];
+  const count = allQuestions.length;
+  const first = allQuestions[0] || stringArray(pack.answers)[0] || "";
+  const prefix = language === "tr" ? `Mülakat seti: ${count || 1} soru` : `Interview set: ${count || 1} question${count === 1 ? "" : "s"}`;
+  return clipText(first ? `${prefix}. ${language === "tr" ? "İlk soru" : "First question"}: ${first}` : prefix);
+}
+
+function summarizeJobHistory(value: unknown, language: AppLanguage) {
+  const analysis = asRecord(value);
+  const title = typeof analysis.title === "string" ? analysis.title : "";
+  const company = typeof analysis.company === "string" ? analysis.company : "";
+  const keywords = stringArray(analysis.keywords).slice(0, 5);
+  const mustHave = stringArray(analysis.mustHave).slice(0, 2);
+  const role = [title, company].filter(Boolean).join(" - ");
+  const parts = [
+    role ? (language === "tr" ? `Rol: ${role}` : `Role: ${role}`) : "",
+    keywords.length ? (language === "tr" ? `Anahtar kelimeler: ${keywords.join(", ")}` : `Keywords: ${keywords.join(", ")}`) : "",
+    mustHave.length ? (language === "tr" ? `Öne çıkanlar: ${mustHave.join(", ")}` : `Must-have: ${mustHave.join(", ")}`) : ""
+  ].filter(Boolean);
+  return clipText(parts.join(". "));
 }
 
 function buildStarDraft(situation: string, task: string, action: string, result: string) {
@@ -1294,7 +1579,15 @@ function HistoryScreen() {
   const history = useAppStore((state) => state.history);
   const language = useAppStore((state) => state.settings.language);
   const [filter, setFilter] = useState<"all" | "optimize" | "ats" | "interview" | "export">("all");
+  const [showAll, setShowAll] = useState(false);
   const filteredHistory = filter === "all" ? history : history.filter((item) => item.type === filter);
+  const visibleHistory = showAll ? filteredHistory : filteredHistory.slice(0, 8);
+  const hiddenCount = Math.max(0, filteredHistory.length - visibleHistory.length);
+
+  useEffect(() => {
+    setShowAll(false);
+  }, [filter]);
+
   return (
     <Section>
       <Title title={t(language, "history_title")} subtitle={t(language, "history_subtitle")} />
@@ -1309,13 +1602,24 @@ function HistoryScreen() {
           { label: t(language, "all"), value: "all" }
         ]}
       />
-      {filteredHistory.length ? filteredHistory.map((item) => (
+      {visibleHistory.length ? visibleHistory.map((item) => (
         <View key={item.id} style={styles.historyRowCompact}>
           <Text style={styles.historyTitle}>{item.title}</Text>
           <Text style={styles.historyMeta}>{formatDateTime(language, item.createdAt)}</Text>
-          <Text numberOfLines={2} style={styles.historyDetail}>{item.detail}</Text>
+          <Text numberOfLines={2} style={styles.historyDetail}>{formatHistoryDetail(item, language)}</Text>
         </View>
       )) : <EmptyState text={t(language, "no_matching_history")} />}
+      {filteredHistory.length > 8 ? (
+        <ActionRow>
+          <Button
+            label={showAll
+              ? (language === "tr" ? "Daha Az Göster" : "Show Less")
+              : (language === "tr" ? `Tüm Geçmişi Göster (${hiddenCount} kayıt daha)` : `Show All History (${hiddenCount} more)`)}
+            onPress={() => setShowAll((value) => !value)}
+            variant="secondary"
+          />
+        </ActionRow>
+      ) : null}
     </Section>
   );
 }
@@ -1331,6 +1635,9 @@ function SettingsScreen() {
   const [backupMode, setBackupMode] = useState<"merge" | "replace">("merge");
   const [message, setMessage] = useState("");
   const [confirmBackupImport, setConfirmBackupImport] = useState(false);
+  const [showAllActivity, setShowAllActivity] = useState(false);
+  const visibleCreditTransactions = showAllActivity ? creditTransactions : creditTransactions.slice(0, 8);
+  const hiddenActivityCount = Math.max(0, creditTransactions.length - visibleCreditTransactions.length);
 
   const buy = async (productId: ProductId) => {
     const result = await purchaseCredits(productId);
@@ -1408,8 +1715,8 @@ function SettingsScreen() {
         <>
           <Text style={styles.warningText}>{getBackupConfirmText(language, backupMode)}</Text>
           <ActionRow>
-            <Button label={language === "tr" ? "??e Aktarmay? Onayla" : "Confirm Import"} onPress={importBackup} variant="secondary" />
-            <Button label={language === "tr" ? "Vazge?" : "Cancel"} onPress={() => setConfirmBackupImport(false)} variant="ghost" />
+            <Button label={language === "tr" ? "İçe Aktarmayı Onayla" : "Confirm Import"} onPress={importBackup} variant="secondary" />
+            <Button label={language === "tr" ? "Vazgeç" : "Cancel"} onPress={() => setConfirmBackupImport(false)} variant="ghost" />
           </ActionRow>
         </>
       ) : (
@@ -1418,13 +1725,24 @@ function SettingsScreen() {
         </ActionRow>
       )}
       <Text style={styles.subheadCompact}>{t(language, "activity_title")}</Text>
-      {creditTransactions.length ? creditTransactions.map((item) => (
+      {visibleCreditTransactions.length ? visibleCreditTransactions.map((item) => (
         <View key={item.id} style={styles.historyRowCompact}>
           <Text style={styles.historyTitle}>{item.note}</Text>
           <Text style={styles.historyMeta}>{formatDateTime(language, item.createdAt)}</Text>
           <Text style={styles.historyDetail}>{tf(language, "credit_amount", { value: item.amount > 0 ? `+${item.amount}` : item.amount })}</Text>
         </View>
       )) : <EmptyState text={t(language, "no_credit_activity")} />}
+      {creditTransactions.length > 8 ? (
+        <ActionRow>
+          <Button
+            label={showAllActivity
+              ? (language === "tr" ? "Daha Az Göster" : "Show Less")
+              : (language === "tr" ? `Tüm Hareketleri Göster (${hiddenActivityCount} kayıt daha)` : `Show All Activity (${hiddenActivityCount} more)`)}
+            onPress={() => setShowAllActivity((value) => !value)}
+            variant="secondary"
+          />
+        </ActionRow>
+      ) : null}
     </Section>
   );
 }
@@ -1609,22 +1927,39 @@ function OptimizationStats({ cv, draft, jobDescription }: { cv: Cv; draft: Optim
 }
 
 function getKeywordCoverage(jobDescription: string, draft: OptimizedCvDraft) {
-  const keywords = splitCsv(jobDescription).filter((word) => word.length > 3).slice(0, 18);
+  const keywords = getJobKeywords(jobDescription).slice(0, 18);
   if (!keywords.length) return 0;
   const haystack = `${draft.summary} ${draft.skills.join(" ")} ${draft.experience.flatMap((item) => item.bullets).join(" ")}`.toLocaleLowerCase(TURKISH_LOCALE);
   const matched = keywords.filter((keyword) => haystack.includes(keyword.toLocaleLowerCase(TURKISH_LOCALE)));
   return Math.round((matched.length / keywords.length) * 100);
 }
 
-function enrichAtsReport(report: AtsReport, cv: Cv): AtsReport {
+function enrichAtsReport(report: AtsReport, cv: Cv, jobDescription: string): AtsReport {
   const language = useAppStore.getState().settings.language;
+  const keywordMatch = getKeywordMatch(jobDescription, cv);
+  const jobLower = jobDescription.toLocaleLowerCase(TURKISH_LOCALE);
   const formattingIssues = [...(report.formattingIssues ?? [])];
   const riskyPhrases = [...(report.riskyPhrases ?? [])];
   const actionItems = [...(report.actionItems ?? [])];
+  const strengths = [...(report.strengths ?? [])];
+  const aiMissingFromJob = (report.missingKeywords ?? [])
+    .filter((keyword) => jobLower.includes(keyword.toLocaleLowerCase(TURKISH_LOCALE)))
+    .slice(0, 6);
+  const missingKeywords = uniqueStrings([...aiMissingFromJob, ...keywordMatch.missing.slice(0, 8)]);
   const raw = cv.rawText.toLocaleLowerCase(TURKISH_LOCALE);
 
   if (cv.rawText.length > 4000) formattingIssues.push(t(language, "cv_too_long"));
   if (cv.experience.some((item) => item.bullets.length > 6)) formattingIssues.push(t(language, "too_many_bullets"));
+  if (keywordMatch.aligned.length) {
+    strengths.push(language === "tr"
+      ? `İlanla örtüşen terimler: ${keywordMatch.aligned.slice(0, 5).join(", ")}`
+      : `Terms aligned with the job: ${keywordMatch.aligned.slice(0, 5).join(", ")}`);
+  }
+  if (keywordMatch.missing.length) {
+    actionItems.push(language === "tr"
+      ? `Eksik terimleri doğal şekilde ekleyin: ${keywordMatch.missing.slice(0, 5).join(", ")}`
+      : `Add missing terms naturally: ${keywordMatch.missing.slice(0, 5).join(", ")}`);
+  }
   for (const phrase of ["hardworking", "team player", "responsible for", "helped with"]) {
     if (raw.includes(phrase)) riskyPhrases.push(tf(language, "replace_weak_phrase", { phrase }));
   }
@@ -1632,9 +1967,17 @@ function enrichAtsReport(report: AtsReport, cv: Cv): AtsReport {
     actionItems.push(t(language, "keep_bullets_short"));
     if (report.missingKeywords?.length) actionItems.push(t(language, "add_missing_keywords_naturally"));
   }
+  if (!keywordMatch.keywords.length) {
+    actionItems.push(language === "tr"
+      ? "İş ilanında net teknik/rol terimi az görünüyor. Daha tam ilan metniyle tekrar kontrol edin."
+      : "The job text has few clear role terms. Re-run with the full job description.");
+  }
 
   return {
     ...report,
+    score: keywordMatch.keywords.length ? clamp(Math.round(report.score * 0.35 + keywordMatch.coverage * 0.65), 0, 100) : clamp(report.score, 0, 100),
+    strengths: uniqueStrings(strengths),
+    missingKeywords,
     formattingIssues: uniqueStrings(formattingIssues),
     riskyPhrases: uniqueStrings(riskyPhrases),
     actionItems: uniqueStrings(actionItems)
@@ -2241,6 +2584,38 @@ const styles = StyleSheet.create({
   answerCardCompact: {
     padding: 12,
     marginTop: 8
+  },
+  questionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    width: "100%",
+    marginTop: 4,
+    marginBottom: 8
+  },
+  questionGridButton: {
+    flexBasis: "31%",
+    flexGrow: 1,
+    minHeight: 48,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  questionGridButtonActive: {
+    borderColor: colors.accent,
+    backgroundColor: colors.soft
+  },
+  questionGridText: {
+    color: colors.muted,
+    fontSize: 16,
+    fontWeight: "800",
+    textAlign: "center"
+  },
+  questionGridTextActive: {
+    color: colors.accentDark
   },
   divider: {
     height: 1,

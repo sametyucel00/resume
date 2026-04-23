@@ -55,7 +55,8 @@ app.post("/api/ai", async (request, response) => {
     const { task, input, provider = "groq" } = request.body || {};
     const validation = validateAiBody({ task, input, provider });
     if (!validation.ok) return response.status(400).json({ error: validation.error });
-    const output = await withTimeout(generateAIResponse({ task, input }, provider), 22000);
+    const normalizedInput = { ...input, language: input.language === "en" ? "en" : "tr" };
+    const output = await withTimeout(generateAIResponse({ task, input: normalizedInput }, provider), 22000);
     if (!output) return response.status(502).json({ error: "Empty AI output" });
     logEvent("ai.complete", { task, provider, ms: Date.now() - started, status: 200 });
     response.json({ output: preserveUtf8(output), provider, model: getAIModel(provider), promptVersion: PROMPT_VERSION });

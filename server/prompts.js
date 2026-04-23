@@ -105,7 +105,11 @@ ${input.jobDescription || ""}`
   interviewQuestions: (input) => ({
     system: `${systemFor(input)} Return valid JSON only. Use Turkish JSON string values when language is tr; keep category title values as Behavioral, Technical, or Role Fit for app mapping.`,
     user: `Generate 6 realistic interview questions for this job and CV. ${toneRule(input)}
-Return JSON with categories: Behavioral, Technical, Role Fit. Each category must have exactly 2 items.
+Return JSON with categories: Behavioral, Technical, Role Fit.
+Required distribution:
+- Behavioral must have exactly 3 items.
+- Technical must have exactly 2 items.
+- Role Fit must have exactly 1 item.
 Question style:
 - Realistic first or second interview questions a recruiter or hiring manager would ask.
 - No extreme case studies, trick questions, abstract strategy prompts, or overdramatic scenarios.

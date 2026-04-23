@@ -9,7 +9,7 @@ import { AiResult, generateAIResult } from "./src/services/ai";
 import { copyTextExport, exportPdf, exportText } from "./src/services/exporter";
 import { pickCvDocument } from "./src/services/importer";
 import { creditProducts, ProductId, purchaseCredits, restorePurchases } from "./src/services/purchases";
-import { templates } from "./src/services/templates";
+import { getTemplatePreset, templates } from "./src/services/templates";
 import { selectActiveCv, useAppStore } from "./src/store/useAppStore";
 import { AiTask, AppLanguage, AtsReport, Cv, CvMode, CvSectionId, HistoryItem, InterviewCategory, InterviewPack, JobAnalysis, OptimizedCvDraft, Profile, SpacingId, TemplateId } from "./src/types";
 import { parseLooseJson } from "./src/utils/json";
@@ -494,7 +494,7 @@ function CvScreen({ next }: { next: () => void }) {
     const parsed = parseRawCvText({ ...cv, rawText: draft });
     const bullets = splitLines(draftBullets).map(cleanBulletInput).filter(Boolean);
     const educationParts = draftEducation.split(",").map((part) => part.trim());
-    return {
+    const nextCv = {
       ...parsed,
       name: draftName || parsed.name,
       summary: draftSummary || parsed.summary,
@@ -505,6 +505,10 @@ function CvScreen({ next }: { next: () => void }) {
       education: draftEducation
         ? upsertAt(cv.education, selectedEducation, { id: cv.education[selectedEducation]?.id ?? shortId("edu"), degree: educationParts[0] ?? "", school: educationParts[1] ?? "", period: educationParts.slice(2).join(", ") })
         : parsed.education
+    };
+    return {
+      ...nextCv,
+      rawText: serializeCvForEditing(nextCv)
     };
   };
 
@@ -517,7 +521,8 @@ function CvScreen({ next }: { next: () => void }) {
 
   const deleteExperience = () => {
     const experience = cv.experience.filter((_, index) => index !== selectedExperience);
-    updateCv({ ...cv, experience });
+    const nextCv = { ...cv, experience };
+    updateCv({ ...nextCv, rawText: serializeCvForEditing(nextCv) });
     setSelectedExperience(Math.max(0, selectedExperience - 1));
   };
 
@@ -530,7 +535,8 @@ function CvScreen({ next }: { next: () => void }) {
 
   const deleteEducation = () => {
     const education = cv.education.filter((_, index) => index !== selectedEducation);
-    updateCv({ ...cv, education });
+    const nextCv = { ...cv, education };
+    updateCv({ ...nextCv, rawText: serializeCvForEditing(nextCv) });
     setSelectedEducation(Math.max(0, selectedEducation - 1));
   };
 
@@ -539,7 +545,10 @@ function CvScreen({ next }: { next: () => void }) {
       const result = await pickCvDocument(apiBaseUrl);
       if (!result) return;
       const imported = parseRawCvText(addCvFromText(result.name, result.text));
+      setSelectedExperience(0);
+      setSelectedEducation(0);
       updateCv(imported);
+      setDraftName(localizeCvName(imported.name, language));
       setDraft(imported.rawText);
       setDraftSummary(imported.summary);
       setDraftSkills(imported.skills.join(", "));
@@ -547,6 +556,7 @@ function CvScreen({ next }: { next: () => void }) {
       setDraftCompany(imported.experience[0]?.company ?? "");
       setDraftPeriod(imported.experience[0]?.period ?? "");
       setDraftBullets(imported.experience[0]?.bullets.join("\n") ?? "");
+      setDraftEducation(formatEducationDraft(imported.education[0]));
       addHistory({ type: "import", title: t(language, "imported_cv_history"), detail: result.name });
       setMessage(tf(language, "cv_imported_confidence", { confidence: `${estimateCvParseConfidence(imported)}%` }));
     } catch (error) {
@@ -683,7 +693,8 @@ function BulletScreen({ next }: { next: () => void }) {
     const experience = cv.experience.length
       ? cv.experience.map((item, index) => (index === 0 ? { ...item, bullets } : item))
       : [{ id: shortId("exp"), company: "", role: "", period: "", bullets }];
-    updateCv({ ...cv, experience, rawText: cv.rawText || bullets.map((item) => `- ${item}`).join("\n") });
+    const nextCv = { ...cv, experience };
+    updateCv({ ...nextCv, rawText: serializeCvForEditing(nextCv) });
     setSource(bullets.join("\n"));
     setRewritten("");
     setMessage(language === "tr" ? "Deneyim maddeleri uygulandı. Özgeçmiş sayfası ve dışa aktarım bu güncel maddeleri kullanır." : "Experience bullets applied. The CV page and export now use these updated bullets.");
@@ -808,12 +819,15 @@ function OptimizeScreen({ next }: { next: () => void }) {
 
   const apply = () => {
     if (!draft) return;
-    updateCv({
+    const nextCv = {
       ...cv,
       summary: applyScope === "all" || applyScope === "summary" ? draft.summary || cv.summary : cv.summary,
       skills: applyScope === "all" || applyScope === "skills" ? draft.skills?.length ? draft.skills : cv.skills : cv.skills,
       experience: applyScope === "all" || applyScope === "bullets" ? draft.experience?.length ? draft.experience.map((item, index) => ({ ...item, id: item.id || cv.experience[index]?.id || shortId("exp") })) : cv.experience : cv.experience,
-      rawText: normalizeCvTextForEditing(cv.rawText)
+    };
+    updateCv({
+      ...nextCv,
+      rawText: serializeCvForEditing(nextCv)
     });
     setMessage(tf(language, "changes_applied", { scope: getApplyScopeLabel(applyScope, language) }));
   };
@@ -895,7 +909,8 @@ function AtsScreen({ next }: { next: () => void }) {
     if (!report?.missingKeywords.length) return;
     const current = new Set(cv.skills.map((skill) => skill.toLocaleLowerCase(TURKISH_LOCALE)));
     const additions = report.missingKeywords.filter((keyword) => !current.has(keyword.toLocaleLowerCase(TURKISH_LOCALE)));
-    updateCv({ ...cv, skills: [...cv.skills, ...additions] });
+    const nextCv = { ...cv, skills: [...cv.skills, ...additions] };
+    updateCv({ ...nextCv, rawText: serializeCvForEditing(nextCv) });
     setMessage(additions.length ? t(language, "missing_keywords_added") : t(language, "keywords_already_present"));
     addHistory({ type: "ats", title: t(language, "ats_keywords_applied_history"), detail: additions.join(", ") || t(language, "keywords_already_present") });
   };
@@ -906,6 +921,7 @@ function AtsScreen({ next }: { next: () => void }) {
       {loading ? <Skeleton lines={4} /> : report ? (
         <View>
           <Text style={styles.score}>{report.score}</Text>
+          <InsightList title={language === "tr" ? "Güçlü alanlar" : "Strong areas"} items={report.strengths} />
           <InsightList title={t(language, "fit_next")} items={report.fixes} />
           <InsightList title={t(language, "missing_keywords")} items={report.missingKeywords} />
           <InsightList title={t(language, "formatting_issues")} items={report.formattingIssues ?? []} />
@@ -973,7 +989,7 @@ function ExportScreen({ next }: { next: () => void }) {
       <Text style={styles.mutedLine}>{t(language, "ats_help")}</Text>
       <View style={{ height: 12 }} />
       <Text style={styles.subheadCompact}>{t(language, "template_title")}</Text>
-      <ChoiceRail<TemplateId> options={templateOptions} value={cv.templateId} onChange={(templateId) => updateCv({ ...cv, templateId, spacingId: spacingForTemplate(templateId) })} />
+      <ChoiceRail<TemplateId> options={templateOptions} value={cv.templateId} onChange={(templateId) => updateCv({ ...cv, templateId })} />
       <Text style={styles.subheadCompact}>{t(language, "spacing_title")}</Text>
       <ChoiceRail<SpacingId> options={spacingOptions} value={cv.spacingId} onChange={(spacingId) => updateCv({ ...cv, spacingId })} />
       <Text style={styles.subheadCompact}>{t(language, "order_title")}</Text>
@@ -1016,12 +1032,13 @@ function ExportWarnings({ warnings }: { warnings: string[] }) {
 
 function CvPreview({ profile, cv }: { profile: Profile; cv: Cv }) {
   const template = templates[cv.templateId];
+  const preset = getTemplatePreset(cv);
   const human = template.mode === "human";
   const language = useAppStore((state) => state.settings.language);
   const contact = [profile.email, profile.phone, profile.location, profile.links].filter(Boolean).join(" | ");
-  const spacing = getSpacingValue(cv.spacingId);
-  const bodyLineHeight = human ? spacing + 15 : spacing + 11;
-  const bodyFontSize = human ? 15 : 14;
+  const spacing = preset.spacing;
+  const bodyLineHeight = preset.bodyLine;
+  const bodyFontSize = preset.bodySize;
 
   return (
     <View style={[styles.cvPaper, styles.cvPaperCompact, human && styles.cvPaperHuman, human && { padding: spacing + 10 }]}>
@@ -1030,7 +1047,7 @@ function CvPreview({ profile, cv }: { profile: Profile; cv: Cv }) {
           {human ? (language === "tr" ? "İnsan Modu" : "Human Mode") : (language === "tr" ? "ATS Modu" : "ATS Mode")}
         </Text>
       </View>
-      <View style={[styles.cvHeader, human && styles.cvHeaderHuman, { paddingBottom: spacing + 4, marginBottom: Math.max(8, spacing) }]}>
+      <View style={[styles.cvHeader, human && styles.cvHeaderHuman, { paddingBottom: preset.headerGap, marginBottom: preset.sectionGap, borderBottomWidth: preset.borderThickness, borderBottomColor: human ? colors.accent : "#CBD5E1" }]}>
         <Text style={[styles.cvName, human && { fontSize: 28 }]}>{profile.fullName || t(language, "your_name")}</Text>
         {!!profile.title && <Text style={[styles.cvTitle, human && { fontSize: 16, marginTop: 6 }]}>{profile.title}</Text>}
         {!!contact && <Text style={[styles.cvMeta, human && { fontSize: 12.5, lineHeight: 20, marginTop: 5 }]}>{contact}</Text>}
@@ -1121,12 +1138,6 @@ function getSpacingValue(spacingId: SpacingId) {
   if (spacingId === "compact") return 6;
   if (spacingId === "spacious") return 14;
   return 10;
-}
-
-function spacingForTemplate(templateId: TemplateId): SpacingId {
-  if (templateId === "ats-compact") return "compact";
-  if (templateId === "ats-spacious") return "spacious";
-  return "balanced";
 }
 
 function InterviewScreen() {
@@ -1312,9 +1323,9 @@ function InterviewAnswerCard({ pair, displayIndex }: { pair?: { category: Interv
 
 function categorizeQuestions(questions: string[]): InterviewCategory[] {
   return [
-    { title: "Behavioral", items: questions.slice(0, 2) },
-    { title: "Technical", items: questions.slice(2, 4) },
-    { title: "Role Fit", items: questions.slice(4, 6) }
+    { title: "Behavioral", items: questions.slice(0, 3) },
+    { title: "Technical", items: questions.slice(3, 5) },
+    { title: "Role Fit", items: questions.slice(5, 6) }
   ].filter((category) => category.items.length > 0) as InterviewCategory[];
 }
 
@@ -1345,9 +1356,10 @@ function getInterviewQuestionItemsByGroup(pairs: OrderedInterviewPair[], group: 
   const wanted = group === "job" ? ["Technical", "Role Fit"] : ["Behavioral"];
   const items = pairs
     .filter((pair) => wanted.includes(pair.category))
-    .map((pair) => `${pair.displayIndex}. ${pair.question}`);
-  if (items.length) return items;
-  return pairs.map((pair) => `${pair.displayIndex}. ${pair.question}`).slice(0, 4);
+    .map((pair) => `${pair.displayIndex}. ${pair.question}`)
+    .slice(0, 3);
+  if (items.length === 3) return items;
+  return pairs.map((pair) => `${pair.displayIndex}. ${pair.question}`).slice(0, 3);
 }
 
 function AiCostHint() {
@@ -1901,6 +1913,24 @@ function normalizeCvTextForEditing(value: string) {
     Array.isArray(parsed.notes) && parsed.notes.length ? `Notlar\n${parsed.notes.map((note) => `- ${note}`).join("\n")}` : ""
   ].filter(Boolean);
 
+  return sections.join("\n\n");
+}
+
+function serializeCvForEditing(cv: Cv) {
+  const sections = [
+    cv.summary ? `Özet\n${cv.summary}` : "",
+    cv.skills.length ? `Yetenekler\n${cv.skills.join(", ")}` : "",
+    cv.experience.length
+      ? `Deneyim\n${cv.experience.map((item) => {
+          const role = [item.role, item.company, item.period].filter(Boolean).join(" | ");
+          const bullets = item.bullets.map((bullet) => `- ${bullet}`).join("\n");
+          return [role, bullets].filter(Boolean).join("\n");
+        }).join("\n\n")}`
+      : "",
+    cv.education.length
+      ? `Eğitim\n${cv.education.map((item) => [item.degree, item.school, item.period].filter(Boolean).join(", ")).join("\n")}`
+      : ""
+  ].filter(Boolean);
   return sections.join("\n\n");
 }
 

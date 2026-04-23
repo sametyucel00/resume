@@ -2,7 +2,7 @@
   "expo": {
     "name": "Hirvia",
     "slug": "hirvia",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "scheme": "hirvia",
@@ -22,9 +22,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.hirvia.ai"
+      "bundleIdentifier": "com.hirvia.ai",
+      "buildNumber": "2"
     },
     "android": {
+      "versionCode": 2,
       "package": "com.hirvia.ai",
       "adaptiveIcon": {
         "foregroundImage": "./assets/branding/hirvia-icon-final.png",

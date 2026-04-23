@@ -25,17 +25,17 @@ export async function pickCvDocument(apiBaseUrl: string): Promise<ImportResult |
   if (Platform.OS === "web") {
     const file = asset.file;
     if (!file) return { name: asset.name, text: "" };
-    if (file.type === "text/plain") return { name: asset.name, text: preserveUtf8(await file.text()) };
+    if (file.type === "text/plain") return { name: preserveUtf8(asset.name), text: preserveUtf8(await file.text()) };
     return uploadForParsing(apiBaseUrl, file, asset.name);
   }
 
   if (asset.mimeType === "text/plain") {
     const text = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.UTF8 });
-    return { name: asset.name, text: preserveUtf8(text) };
+    return { name: preserveUtf8(asset.name), text: preserveUtf8(text) };
   }
 
   const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
-  return uploadForParsing(apiBaseUrl, base64ToBlob(base64, asset.mimeType || "application/octet-stream"), asset.name);
+  return uploadForParsing(apiBaseUrl, base64ToBlob(base64, asset.mimeType || "application/octet-stream"), preserveUtf8(asset.name));
 }
 
 async function uploadForParsing(apiBaseUrl: string, file: Blob, name: string): Promise<ImportResult> {
@@ -54,7 +54,7 @@ async function uploadForParsing(apiBaseUrl: string, file: Blob, name: string): P
     throw new Error(message);
   }
   const data = (await response.json()) as { text: string };
-  return { name, text: preserveUtf8(data.text || "") };
+  return { name: preserveUtf8(name), text: preserveUtf8(data.text || "") };
 }
 
 function base64ToBlob(base64: string, mimeType: string) {

@@ -136,7 +136,35 @@ function normalizeImportError(error) {
 }
 
 function preserveUtf8(value) {
-  return String(value || "").normalize("NFC");
+  return repairCommonMojibake(String(value || "")).normalize("NFC");
+}
+
+function repairCommonMojibake(value) {
+  const map = {
+    "Ã§": "ç",
+    "Ã‡": "Ç",
+    "ÄŸ": "ğ",
+    "Äž": "Ğ",
+    "Ä±": "ı",
+    "Ä°": "İ",
+    "Ã¶": "ö",
+    "Ã–": "Ö",
+    "ÅŸ": "ş",
+    "Åž": "Ş",
+    "Ã¼": "ü",
+    "Ãœ": "Ü",
+    "â€“": "-",
+    "â€”": "-",
+    "â€˜": "'",
+    "â€™": "'",
+    "â€œ": "\"",
+    "â€": "\""
+  };
+  let repaired = value;
+  for (const [broken, fixed] of Object.entries(map)) {
+    repaired = repaired.split(broken).join(fixed);
+  }
+  return repaired;
 }
 
 const port = Number(process.env.PORT || 8787);

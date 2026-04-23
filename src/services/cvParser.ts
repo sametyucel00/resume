@@ -11,17 +11,17 @@ export function mergeProfileIntoCv(profile: Profile, cv: Cv): Cv {
 
 export function parseRawCvText(cv: Cv): Cv {
   const lines = splitLines(cv.rawText);
-  const skillLine = lines.find((line) => matchesAnyHeader(line, skillHeaders));
   const educationIndex = lines.findIndex((line) => matchesAnyHeader(line, educationHeaders));
   const experienceIndex = lines.findIndex((line) => matchesAnyHeader(line, experienceHeaders));
   const summary = cv.summary || findSummary(lines);
   const parsedExperience = inferExperience(lines, experienceIndex);
   const parsedEducation = inferEducation(lines, educationIndex);
+  const parsedSkills = inferSkills(lines);
 
   return {
     ...cv,
     summary: summary.slice(0, 520),
-    skills: cv.skills.length ? cv.skills : skillLine ? splitCsv(removeKnownSkillHeader(skillLine)) : [],
+    skills: cv.skills.length ? cv.skills : parsedSkills,
     experience: cv.experience.length ? cv.experience : parsedExperience,
     education: cv.education.length ? cv.education : parsedEducation
   };
@@ -45,12 +45,21 @@ const sectionHeaders = [...summaryHeaders, ...experienceHeaders, ...educationHea
 
 function findSummary(lines: string[]) {
   const summaryIndex = lines.findIndex((line) => matchesAnyHeader(line, summaryHeaders));
-  if (summaryIndex >= 0) return lines.slice(summaryIndex + 1, summaryIndex + 4).join(" ");
-  return lines.filter((line) => !isSectionHeader(line) && !isBullet(line)).slice(0, 3).join(" ");
+  if (summaryIndex >= 0) {
+    return lines
+      .slice(summaryIndex + 1, summaryIndex + 5)
+      .filter((line) => !looksLikeContactLine(line))
+      .join(" ");
+  }
+  return lines
+    .filter((line) => !isSectionHeader(line) && !isBullet(line) && !looksLikeContactLine(line))
+    .slice(0, 3)
+    .join(" ");
 }
 
 function inferExperience(lines: string[], experienceIndex: number) {
   const section = sliceSection(lines, experienceIndex, ["education", "egitim", "e\u011fitim", "skills", "yetenek", "certifications", "sertifika", "licenses", "lisanslar"]);
+  if (!section.length) return [];
   const bullets = section.filter(isBullet).map(cleanBullet).slice(0, 6);
   const header = section.find((line) => !isBullet(line) && !isSectionHeader(line)) ?? "";
   const period = header.match(/\b(19|20)\d{2}\b.*?(\b(19|20)\d{2}\b|present|current|devam)/i)?.[0] ?? "";
@@ -73,6 +82,7 @@ function inferExperience(lines: string[], experienceIndex: number) {
 
 function inferEducation(lines: string[], educationIndex: number) {
   const section = sliceSection(lines, educationIndex, ["experience", "deneyim", "skills", "yetenek", "projects", "projeler", "certifications", "sertifika"]);
+  if (!section.length) return [];
   const line = section.find((item) => !isSectionHeader(item) && !isBullet(item)) ?? "";
   if (!line) return [];
   const period = line.match(/\b(19|20)\d{2}\b.*?(\b(19|20)\d{2}\b|present|current|devam)?/i)?.[0] ?? "";
@@ -82,13 +92,14 @@ function inferEducation(lines: string[], educationIndex: number) {
 }
 
 function sliceSection(lines: string[], index: number, stopHeaders: string[]) {
+  if (index < 0) return [];
   const start = index >= 0 ? index + 1 : 0;
   const result: string[] = [];
   for (const line of lines.slice(start)) {
     if (result.length > 0 && matchesAnyHeader(line, stopHeaders)) break;
     result.push(line);
   }
-  return result.length ? result : lines;
+  return result;
 }
 
 function isBullet(line: string) {
@@ -116,6 +127,26 @@ function removeKnownSkillHeader(line: string) {
     if (index >= 0) next = `${next.slice(0, index)}${next.slice(index + header.length)}`;
   }
   return next;
+}
+
+function inferSkills(lines: string[]) {
+  const skillIndex = lines.findIndex((line) => matchesAnyHeader(line, skillHeaders));
+  if (skillIndex >= 0) {
+    const section = sliceSection(lines, skillIndex, ["experience", "deneyim", "education", "egitim", "e\u011fitim", "projects", "projeler", "certifications", "sertifika"]);
+    const joined = section
+      .map(removeKnownSkillHeader)
+      .filter((line) => !isSectionHeader(line))
+      .join(", ");
+    return splitCsv(joined);
+  }
+
+  const likelySkillsLine = lines.find((line) => !looksLikeContactLine(line) && (line.split(",").length >= 4 || line.split(" | ").length >= 4));
+  if (!likelySkillsLine) return [];
+  return splitCsv(likelySkillsLine.replace(/\s+\|\s+/g, ", "));
+}
+
+function looksLikeContactLine(line: string) {
+  return /@|linkedin|github|https?:\/\/|\+?\d[\d\s()-]{6,}/i.test(line);
 }
 
 const exportCopy = {

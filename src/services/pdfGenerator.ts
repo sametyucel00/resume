@@ -5,6 +5,7 @@ import { PDFDocument, PDFFont, PDFPage, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { AppLanguage, Cv, CvSectionId, Profile } from "../types";
 import { preserveUtf8 } from "../utils/text";
+import { getTemplatePreset } from "./templates";
 
 const notoSansRegular = require("../../assets/fonts/NotoSans-Regular.ttf");
 const notoSansBold = require("../../assets/fonts/NotoSans-Bold.ttf");
@@ -19,12 +20,6 @@ const colors = {
   line: rgb(0.82, 0.86, 0.92),
   accent: rgb(0.31, 0.27, 0.9)
 };
-
-const spacingScale = {
-  compact: 6,
-  balanced: 10,
-  spacious: 14
-} as const;
 
 type PdfFonts = {
   regular: PDFFont;
@@ -111,7 +106,7 @@ function drawHeader(cursor: PdfCursor, profile: Profile, cv: Cv, language: AppLa
   const title = preserveUtf8(profile.title);
   const contact = [profile.email, profile.phone, profile.location, profile.links].map(preserveUtf8).filter(Boolean).join(" | ");
   const human = cv.mode === "human";
-  const spacing = spacingScale[cv.spacingId] ?? spacingScale.balanced;
+  const preset = getTemplatePreset(cv);
 
   drawText(cursor, name, {
     font: cursor.fonts.bold,
@@ -137,7 +132,7 @@ function drawHeader(cursor: PdfCursor, profile: Profile, cv: Cv, language: AppLa
       size: human ? 10.2 : 9.5,
       color: colors.muted,
       lineHeight: human ? 15 : 14,
-      marginAfter: human ? spacing + 6 : 14
+      marginAfter: human ? preset.headerGap : preset.headerGap
     });
   } else {
     cursor.y -= 10;
@@ -146,83 +141,80 @@ function drawHeader(cursor: PdfCursor, profile: Profile, cv: Cv, language: AppLa
   cursor.page.drawLine({
     start: { x: MARGIN, y: cursor.y },
     end: { x: A4.width - MARGIN, y: cursor.y },
-    thickness: 0.8,
-    color: colors.line
+    thickness: human ? 1.5 : preset.borderThickness,
+    color: human ? colors.accent : colors.line
   });
-  cursor.y -= 18;
+  cursor.y -= preset.sectionGap;
 }
 
 function drawSummary(cursor: PdfCursor, profile: Profile, cv: Cv, language: AppLanguage) {
   const text = preserveUtf8(cv.summary || profile.summary);
   if (!text) return;
-  const human = cv.mode === "human";
-  const spacing = spacingScale[cv.spacingId] ?? spacingScale.balanced;
-  drawSectionTitle(cursor, sectionCopy[language].summary, language);
-  drawText(cursor, text, { font: cursor.fonts.regular, size: human ? 11 : 10.5, lineHeight: human ? spacing + 9 : 15.5, color: colors.text, marginAfter: spacing });
+  const preset = getTemplatePreset(cv);
+  drawSectionTitle(cursor, cv, sectionCopy[language].summary, language);
+  drawText(cursor, text, { font: cursor.fonts.regular, size: preset.bodySize - 0.3, lineHeight: preset.bodyLine, color: colors.text, marginAfter: preset.spacing });
 }
 
 function drawSkills(cursor: PdfCursor, cv: Cv, language: AppLanguage) {
   if (!cv.skills.length) return;
-  const human = cv.mode === "human";
-  const spacing = spacingScale[cv.spacingId] ?? spacingScale.balanced;
-  drawSectionTitle(cursor, sectionCopy[language].skills, language);
-  drawText(cursor, cv.skills.map(preserveUtf8).join(", "), { font: cursor.fonts.regular, size: human ? 10.7 : 10.2, lineHeight: human ? spacing + 9 : 15, color: colors.text, marginAfter: spacing });
+  const preset = getTemplatePreset(cv);
+  drawSectionTitle(cursor, cv, sectionCopy[language].skills, language);
+  drawText(cursor, cv.skills.map(preserveUtf8).join(", "), { font: cursor.fonts.regular, size: preset.bodySize - 0.6, lineHeight: preset.bodyLine, color: colors.text, marginAfter: preset.spacing });
 }
 
 function drawExperience(cursor: PdfCursor, cv: Cv, language: AppLanguage) {
   if (!cv.experience.length) return;
-  drawSectionTitle(cursor, sectionCopy[language].experience, language);
-  const spacing = spacingScale[cv.spacingId] ?? spacingScale.balanced;
-  const human = cv.mode === "human";
+  drawSectionTitle(cursor, cv, sectionCopy[language].experience, language);
+  const preset = getTemplatePreset(cv);
 
   for (const item of cv.experience) {
     const heading = [item.role, item.company].map(preserveUtf8).filter(Boolean).join(" | ");
     if (heading) {
-      drawText(cursor, heading, { font: cursor.fonts.bold, size: human ? 12 : 11.3, lineHeight: human ? spacing + 8 : 15.5, color: colors.ink, marginAfter: 1 });
+      drawText(cursor, heading, { font: cursor.fonts.bold, size: preset.headingSize - 1, lineHeight: preset.bodyLine, color: colors.ink, marginAfter: 1 });
     }
     if (item.period) {
-      drawText(cursor, preserveUtf8(item.period), { font: cursor.fonts.regular, size: 9.2, lineHeight: 13, color: colors.muted, marginAfter: Math.max(4, spacing - 2) });
+      drawText(cursor, preserveUtf8(item.period), { font: cursor.fonts.regular, size: 9.2, lineHeight: 13, color: colors.muted, marginAfter: Math.max(4, preset.spacing - 2) });
     }
     for (const bullet of item.bullets) {
-      drawBullet(cursor, preserveUtf8(bullet));
+      drawBullet(cursor, preserveUtf8(bullet), preset.bodySize - 0.6, preset.bodyLine);
     }
-    cursor.y -= Math.max(5, spacing - 1);
+    cursor.y -= Math.max(5, preset.spacing - 1);
   }
   cursor.y -= 2;
 }
 
 function drawEducation(cursor: PdfCursor, cv: Cv, language: AppLanguage) {
   if (!cv.education.length) return;
-  drawSectionTitle(cursor, sectionCopy[language].education, language);
+  const preset = getTemplatePreset(cv);
+  drawSectionTitle(cursor, cv, sectionCopy[language].education, language);
 
   for (const item of cv.education) {
     const heading = [item.degree, item.school].map(preserveUtf8).filter(Boolean).join(", ");
     const period = preserveUtf8(item.period);
     drawText(cursor, [heading, period].filter(Boolean).join(" | "), {
       font: cursor.fonts.regular,
-      size: 10.2,
-      lineHeight: 15,
+      size: preset.bodySize - 0.6,
+      lineHeight: preset.bodyLine,
       color: colors.text,
-      marginAfter: 5
+      marginAfter: Math.max(5, preset.spacing - 1)
     });
   }
-  cursor.y -= 5;
+  cursor.y -= Math.max(4, preset.spacing - 2);
 }
 
-function drawSectionTitle(cursor: PdfCursor, title: string, language: AppLanguage) {
+function drawSectionTitle(cursor: PdfCursor, cv: Cv, title: string, language: AppLanguage) {
+  const preset = getTemplatePreset(cv);
   ensureSpace(cursor, 32);
   drawText(cursor, preserveUtf8(title).toLocaleUpperCase(language === "tr" ? "tr-TR" : "en-US"), {
     font: cursor.fonts.bold,
     size: 10.2,
-    color: colors.accent,
+    color: preset.headingColor === "#4F46E5" ? colors.accent : colors.ink,
     lineHeight: 13,
     marginAfter: 7
   });
 }
 
-function drawBullet(cursor: PdfCursor, text: string) {
-  const size = 10.2;
-  const lineHeight = 14.5;
+function drawBullet(cursor: PdfCursor, text: string, size = 10.2, lineHeight = 14.5) {
   const bulletX = MARGIN;
   const textX = MARGIN + 12;
   const lines = wrapText(text, cursor.fonts.regular, size, CONTENT_WIDTH - 12);

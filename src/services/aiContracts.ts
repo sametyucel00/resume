@@ -49,9 +49,9 @@ const fallbackByTask: Record<AppLanguage, Record<AiTask, string>> = {
     }),
     interviewQuestions: JSON.stringify({
       categories: [
-        { title: "Behavioral", items: ["Son deneyiminizde sorumluluğunuz neydi ve günlük iş akışınız nasıldı?", "Bir ekip arkadaşıyla veya paydaşla çalışırken süreci nasıl takip ettiniz?"] },
+        { title: "Behavioral", items: ["Son deneyiminizde sorumluluğunuz neydi ve günlük iş akışınız nasıldı?", "Bir ekip arkadaşıyla veya paydaşla çalışırken süreci nasıl takip ettiniz?", "Zorlandığınız bir işi toparlamak için nasıl bir yol izlediniz?"] },
         { title: "Technical", items: ["Bu rolde kullanmanız beklenen araç veya yöntemlerle hangi seviyede deneyiminiz var?", "Özgeçmişinizdeki en ilgili projeyi veya görevi nasıl yürüttünüz?"] },
-        { title: "Role Fit", items: ["Bu ilana başvurmanızın ana nedeni nedir?", "Deneyiminizin bu roldeki beklentilerle en çok örtüşen tarafı hangisi?"] }
+        { title: "Role Fit", items: ["Deneyiminizin bu roldeki beklentilerle en çok örtüşen tarafı hangisi?"] }
       ]
     }),
     interviewAnswers: "Kısa bir STAR yapısı kullanın: durum, görev, aksiyon, sonuç. Cevabı net, dürüst ve iş ilanıyla bağlantılı tutun."
@@ -93,9 +93,9 @@ const fallbackByTask: Record<AppLanguage, Record<AiTask, string>> = {
     }),
     interviewQuestions: JSON.stringify({
       categories: [
-        { title: "Behavioral", items: ["Tell me about a project where you had to influence stakeholders.", "Describe a time you improved a process under time pressure."] },
+        { title: "Behavioral", items: ["Tell me about a project where you had to influence stakeholders.", "Describe a time you improved a process under time pressure.", "Tell me about a time you had to recover a piece of work that was going off track."] },
         { title: "Technical", items: ["Which tools or methods would you use to solve the main problem in this role?", "How do you validate that your work is producing measurable value?"] },
-        { title: "Role Fit", items: ["Why is this role a strong next step for your experience?", "Which part of the job description best matches your recent work?"] }
+        { title: "Role Fit", items: ["Which part of the job description best matches your recent work?"] }
       ]
     }),
     interviewAnswers: "Use a concise STAR structure: situation, task, action, result. Keep the answer specific, honest, and connected to the job description."
@@ -235,15 +235,17 @@ function normalizeOptimizedCv(value: string) {
 function normalizeInterviewQuestions(value: string) {
   const parsed = parseLooseJson<{ categories: InterviewCategory[] }>(value, {
     categories: [
-      { title: "Behavioral", items: splitLines(value).slice(0, 2) },
-      { title: "Technical", items: splitLines(value).slice(2, 4) },
-      { title: "Role Fit", items: splitLines(value).slice(4, 6) }
+      { title: "Behavioral", items: splitLines(value).slice(0, 3) },
+      { title: "Technical", items: splitLines(value).slice(3, 5) },
+      { title: "Role Fit", items: splitLines(value).slice(5, 6) }
     ]
   });
-  const categories = (parsed.categories ?? []).map((category) => ({
-    title: category.title,
-    items: stringArray(category.items).slice(0, 3)
-  })).filter((category) => ["Behavioral", "Technical", "Role Fit"].includes(category.title) && category.items.length);
+  const categoryMap = new Map((parsed.categories ?? []).map((category) => [category.title, stringArray(category.items)]));
+  const categories = [
+    { title: "Behavioral" as const, items: (categoryMap.get("Behavioral") ?? []).slice(0, 3) },
+    { title: "Technical" as const, items: (categoryMap.get("Technical") ?? []).slice(0, 2) },
+    { title: "Role Fit" as const, items: (categoryMap.get("Role Fit") ?? []).slice(0, 1) }
+  ].filter((category) => category.items.length);
   return categories.length ? JSON.stringify({ categories }) : "";
 }
 

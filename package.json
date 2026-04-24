@@ -8,6 +8,7 @@
     "web": "expo start --web",
     "api": "node server/index.js",
     "dev": "concurrently \"npm run api\" \"npm run web\"",
+    "postinstall": "patch-package",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -43,6 +44,7 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/react": "~18.3.12",
+    "patch-package": "^8.0.1",
     "typescript": "^5.3.3"
   }
 }

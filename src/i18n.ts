@@ -212,7 +212,7 @@ const copy = {
     role_fit: "Rol uyumu",
     copied: "Kopyalandı.",
     not_set: "Ayarlanmış değil",
-    purchase_note: "{credits} kredi satın alındı",
+    purchase_note: "{credits} kredi eklendi",
     restore_note: "{credits} kredi geri yüklendi",
     backup_complete: "Yedek {mode} tamamlandı. {cvCount} özgeçmiş, {historyCount} geçmiş kaydı.",
     backup_import_failed: "Bu yedek dosyası içe aktarılamadı.",
@@ -471,7 +471,7 @@ const copy = {
     role_fit: "Role Fit",
     copied: "Copied.",
     not_set: "Not set",
-    purchase_note: "Purchased {credits} credits",
+    purchase_note: "Added {credits} credits",
     restore_note: "Restored {credits} credits",
     backup_complete: "Backup {mode} complete. {cvCount} CVs, {historyCount} history items.",
     backup_import_failed: "Could not import this backup file.",
@@ -488,7 +488,7 @@ const copy = {
     keep_bullets_short: "Keep each bullet short and outcome-oriented.",
     add_missing_keywords_naturally: "Add the strongest missing keywords naturally into summary or experience.",
     new_cv: "New",
-    primary_cv: "Primary CV",
+    primary_cv: "Main CV",
     source_bullets_placeholder: "Managed reports\nWorked with teams\nImproved process",
     bullet_examples_placeholder: "Launched reporting flow\nReduced manual review time\nCoordinated product and sales teams",
     star_situation_placeholder: "What was happening?",
@@ -522,7 +522,7 @@ const copy = {
 } as const;
 
 function safeLanguage(language: AppLanguage | null | undefined): AppLanguage {
-  return language === "en" || language === "tr" ? language : "tr";
+  return language === "en" || language === "tr" ? language : "en";
 }
 
 export function t(language: AppLanguage | null | undefined, key: keyof typeof copy["en"]) {

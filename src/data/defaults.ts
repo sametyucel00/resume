@@ -16,7 +16,7 @@ export const emptyProfile: Profile = {
 
 export const starterCv: Cv = {
   id: "cv_default",
-  name: "Ana Özgeçmiş",
+  name: "Main CV",
   summary: "",
   skills: [],
   experience: [],
@@ -32,7 +32,7 @@ export const starterCv: Cv = {
 export const defaultSettings: Settings = {
   apiBaseUrl: embeddedApiBaseUrl || "http://localhost:8787",
   aiProvider: "groq",
-  language: "tr",
+  language: "en",
   tone: "direct",
   credits: 12,
   lastJobDescription: "",

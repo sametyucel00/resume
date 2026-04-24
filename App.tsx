@@ -250,11 +250,6 @@ function ConsentGate() {
       <View style={styles.infoPanel}>
         <Text style={styles.infoText}>{t(language, "ai_consent_detail")}</Text>
       </View>
-      <View style={styles.infoPanelSoft}>
-        <Text style={styles.previewLabel}>{t(language, "privacy_policy")} / {t(language, "terms_of_use")}</Text>
-        <Text style={styles.infoText}>{buildLegalUrl("privacy")}</Text>
-        <Text style={styles.infoText}>{buildLegalUrl("terms")}</Text>
-      </View>
       <ActionRow>
         <Button label={t(language, "open_privacy")} onPress={() => void openLegalUrl("privacy")} variant="secondary" />
         <Button label={t(language, "open_terms")} onPress={() => void openLegalUrl("terms")} variant="secondary" />
@@ -364,12 +359,9 @@ function BrandLockup({ variant }: { variant: "header" | "hero" | "panel" | "load
 
 function buildLegalUrl(section: "privacy" | "terms" | "help" | "subscription") {
   const envBase = String(process.env.EXPO_PUBLIC_LEGAL_BASE_URL ?? "").trim();
-  const base =
-    envBase ||
-    (typeof window !== "undefined" && window.location?.origin
-      ? `${window.location.origin}/support/index.html`
-      : "");
-  return base ? `${base}#${section}` : `support/index.html#${section}`;
+  const base = envBase || "https://hirvia.netlify.app/";
+  const cleanBase = base.split("#")[0].replace(/\/$/, "");
+  return `${cleanBase}/#${section}`;
 }
 
 async function openLegalUrl(section: "privacy" | "terms" | "help" | "subscription") {
@@ -431,10 +423,19 @@ function ProfileScreen({ next }: { next: () => void }) {
         <Field label={t(language, "profile_email")} value={profile.email} onChangeText={(email) => updateProfile({ email })} placeholder={t(language, "profile_email_placeholder")} />
         <Field label={t(language, "profile_phone")} value={profile.phone} onChangeText={(phone) => updateProfile({ phone })} placeholder="+90..." />
       </View>
-      <Field label={t(language, "profile_links")} value={`${profile.location}${profile.links ? `\n${profile.links}` : ""}`} onChangeText={(value) => {
-        const [location = "", ...links] = splitLines(value);
-        updateProfile({ location, links: links.join("\n") });
-      }} multiline placeholder={t(language, "profile_links_placeholder")} />
+      <Field
+        label={language === "tr" ? "Konum" : "Location"}
+        value={profile.location}
+        onChangeText={(location) => updateProfile({ location })}
+        placeholder={language === "tr" ? "İstanbul" : "Istanbul"}
+      />
+      <Field
+        label={language === "tr" ? "Bağlantılar" : "Links"}
+        value={profile.links}
+        onChangeText={(links) => updateProfile({ links })}
+        multiline
+        placeholder={language === "tr" ? "linkedin.com/in/ornek\ngithub.com/ornek" : "linkedin.com/in/example\ngithub.com/example"}
+      />
       <Field label={t(language, "profile_summary")} value={profile.summary} onChangeText={(summary) => updateProfile({ summary })} multiline placeholder={t(language, "summary_placeholder")} />
       <ActionRow>
         <Button label={t(language, "generate")} onPress={generate} loading={loading} />
@@ -462,7 +463,7 @@ function CvScreen({ next }: { next: () => void }) {
   const spendCredit = useAppStore((state) => state.spendCredit);
   const [selectedExperience, setSelectedExperience] = useState(0);
   const [selectedEducation, setSelectedEducation] = useState(0);
-  const [draft, setDraft] = useState(normalizeCvTextForEditing(cv.rawText));
+  const [draft, setDraft] = useState(normalizeCvTextForEditing(cv.rawText, language));
   const [draftName, setDraftName] = useState(cv.name);
   const [draftSummary, setDraftSummary] = useState(cv.summary);
   const [draftSkills, setDraftSkills] = useState(cv.skills.join(", "));
@@ -479,7 +480,7 @@ function CvScreen({ next }: { next: () => void }) {
   useEffect(() => {
     const experience = cv.experience[selectedExperience] ?? cv.experience[0];
     const education = cv.education[selectedEducation] ?? cv.education[0];
-    setDraft(normalizeCvTextForEditing(cv.rawText));
+    setDraft(normalizeCvTextForEditing(cv.rawText, language));
     setDraftName(localizeCvName(cv.name, language));
     setDraftSummary(cv.summary);
     setDraftSkills(cv.skills.join(", "));
@@ -508,35 +509,37 @@ function CvScreen({ next }: { next: () => void }) {
     };
     return {
       ...nextCv,
-      rawText: serializeCvForEditing(nextCv)
+      rawText: serializeCvForEditing(nextCv, language)
     };
   };
 
   const addExperience = () => {
     const nextCv = buildStructuredCv();
     const experience = [...nextCv.experience, { id: shortId("exp"), role: "", company: "", period: "", bullets: [] }];
-    updateCv({ ...nextCv, experience });
+    const updatedCv = { ...nextCv, experience };
+    updateCv({ ...updatedCv, rawText: serializeCvForEditing(updatedCv, language) });
     setSelectedExperience(experience.length - 1);
   };
 
   const deleteExperience = () => {
     const experience = cv.experience.filter((_, index) => index !== selectedExperience);
     const nextCv = { ...cv, experience };
-    updateCv({ ...nextCv, rawText: serializeCvForEditing(nextCv) });
+    updateCv({ ...nextCv, rawText: serializeCvForEditing(nextCv, language) });
     setSelectedExperience(Math.max(0, selectedExperience - 1));
   };
 
   const addEducation = () => {
     const nextCv = buildStructuredCv();
     const education = [...nextCv.education, { id: shortId("edu"), degree: "", school: "", period: "" }];
-    updateCv({ ...nextCv, education });
+    const updatedCv = { ...nextCv, education };
+    updateCv({ ...updatedCv, rawText: serializeCvForEditing(updatedCv, language) });
     setSelectedEducation(education.length - 1);
   };
 
   const deleteEducation = () => {
     const education = cv.education.filter((_, index) => index !== selectedEducation);
     const nextCv = { ...cv, education };
-    updateCv({ ...nextCv, rawText: serializeCvForEditing(nextCv) });
+    updateCv({ ...nextCv, rawText: serializeCvForEditing(nextCv, language) });
     setSelectedEducation(Math.max(0, selectedEducation - 1));
   };
 
@@ -588,7 +591,8 @@ function CvScreen({ next }: { next: () => void }) {
     const output = result.output;
     const skills = splitCsv(output.replace(/Core:|Tools:|Strengths:/g, ""));
     setDraftSkills(skills.join(", "));
-    updateCv({ ...buildStructuredCv(), skills });
+    const nextCv = { ...buildStructuredCv(), skills };
+    updateCv({ ...nextCv, rawText: serializeCvForEditing(nextCv, language) });
     addHistory({ type: "rewrite", title: t(language, "skills_organized_history"), detail: output, ...aiHistoryMeta("organizeSkills", result, draft) });
     setMessage(result.status === "fallback" ? `${result.message} ${t(language, "credit_used_suffix")}` : t(language, "skills_organized_done"));
     setLoading(false);
@@ -694,7 +698,7 @@ function BulletScreen({ next }: { next: () => void }) {
       ? cv.experience.map((item, index) => (index === 0 ? { ...item, bullets } : item))
       : [{ id: shortId("exp"), company: "", role: "", period: "", bullets }];
     const nextCv = { ...cv, experience };
-    updateCv({ ...nextCv, rawText: serializeCvForEditing(nextCv) });
+    updateCv({ ...nextCv, rawText: serializeCvForEditing(nextCv, language) });
     setSource(bullets.join("\n"));
     setRewritten("");
     setMessage(language === "tr" ? "Deneyim maddeleri uygulandı. Özgeçmiş sayfası ve dışa aktarım bu güncel maddeleri kullanır." : "Experience bullets applied. The CV page and export now use these updated bullets.");
@@ -827,7 +831,7 @@ function OptimizeScreen({ next }: { next: () => void }) {
     };
     updateCv({
       ...nextCv,
-      rawText: serializeCvForEditing(nextCv)
+      rawText: serializeCvForEditing(nextCv, language)
     });
     setMessage(tf(language, "changes_applied", { scope: getApplyScopeLabel(applyScope, language) }));
   };
@@ -910,7 +914,7 @@ function AtsScreen({ next }: { next: () => void }) {
     const current = new Set(cv.skills.map((skill) => skill.toLocaleLowerCase(TURKISH_LOCALE)));
     const additions = report.missingKeywords.filter((keyword) => !current.has(keyword.toLocaleLowerCase(TURKISH_LOCALE)));
     const nextCv = { ...cv, skills: [...cv.skills, ...additions] };
-    updateCv({ ...nextCv, rawText: serializeCvForEditing(nextCv) });
+    updateCv({ ...nextCv, rawText: serializeCvForEditing(nextCv, language) });
     setMessage(additions.length ? t(language, "missing_keywords_added") : t(language, "keywords_already_present"));
     addHistory({ type: "ats", title: t(language, "ats_keywords_applied_history"), detail: additions.join(", ") || t(language, "keywords_already_present") });
   };
@@ -1686,12 +1690,6 @@ function SettingsScreen() {
       <Text style={styles.subheadCompact}>{t(language, "tone_title")}</Text>
       <Segmented options={[{ label: t(language, "direct"), value: "direct" }, { label: t(language, "executive"), value: "executive" }, { label: t(language, "technical"), value: "technical" }]} value={settings.tone} onChange={(tone) => updateSettings({ tone })} />
       <Text style={styles.mutedLine}>{t(language, "tone_help")}</Text>
-      <View style={styles.tonePreviewBox}>
-        <Text style={styles.previewLabel}>{language === "tr" ? "Canlı ton önizlemesi" : "Live tone preview"}</Text>
-        {getTonePreview(settings.tone, language).map((line) => (
-          <Text key={line} style={styles.tonePreviewText}>- {line}</Text>
-        ))}
-      </View>
       <Text style={styles.subheadCompact}>{t(language, "ai_consent_title")}</Text>
       <Segmented options={[{ label: t(language, "ai_consent_allow"), value: "on" }, { label: t(language, "ai_consent_deny"), value: "off" }]} value={settings.aiDataConsent === true ? "on" : "off"} onChange={(value) => updateSettings({ aiDataConsent: value === "on" })} />
       <Text style={styles.mutedLine}>{settings.aiDataConsent ? t(language, "ai_consent_on") : t(language, "ai_consent_off")}</Text>
@@ -1762,45 +1760,10 @@ function SettingsScreen() {
 function localizeCreditProduct(productId: ProductId, language: AppLanguage) {
   if (language !== "tr") return creditProducts[productId];
   const trCopy: Record<ProductId, { label: string; description: string; credits: number }> = {
-    credits_25: { label: "25 kredi", credits: 25, description: "Hızlı optimizasyon paketi" },
-    credits_100: { label: "100 kredi", credits: 100, description: "Başvuru maratonu paketi" }
+    credits_25: { label: "25 Kredi", credits: 25, description: "Hızlı başvuru paketi" },
+    credits_100: { label: "100 Kredi", credits: 100, description: "Yoğun başvuru paketi" }
   };
   return trCopy[productId];
-}
-
-function getTonePreview(tone: "direct" | "executive" | "technical", language: AppLanguage) {
-  if (language === "tr") {
-    if (tone === "executive") return [
-      "Daha stratejik ve kıdemli bir dil öne çıkar.",
-      "Sahiplik, paydaş uyumu ve iş etkisi daha görünür olur.",
-      "Özetler daha karar verici odaklı okunur."
-    ];
-    if (tone === "technical") return [
-      "Araçlar, yöntemler ve uygulama detayları daha net yazılır.",
-      "Süreç ve teknik katkı daha görünür hale gelir.",
-      "Çıktı daha sistematik ve uygulamaya yakın hissedilir."
-    ];
-    return [
-      "Kısa, net ve doğrudan bir anlatım öne çıkar.",
-      "Gereksiz süslemeler azalır.",
-      "Mesaj daha hızlı ve anlaşılır okunur."
-    ];
-  }
-  if (tone === "executive") return [
-    "The writing becomes more strategic and senior in tone.",
-    "Ownership, stakeholder alignment, and business impact stand out.",
-    "Summaries read more decision-maker friendly."
-  ];
-  if (tone === "technical") return [
-    "Tools, methods, and implementation detail become more explicit.",
-    "Process and technical contribution become easier to see.",
-    "The output feels more systematic and execution focused."
-  ];
-  return [
-    "The writing stays short, direct, and plainspoken.",
-    "Extra framing is reduced.",
-    "The message becomes faster to scan."
-  ];
 }
 
 function getBackupConfirmText(language: AppLanguage, backupMode: "merge" | "replace") {
@@ -1891,7 +1854,7 @@ function normalizeBulletOutput(value: string) {
     .join("\n");
 }
 
-function normalizeCvTextForEditing(value: string) {
+function normalizeCvTextForEditing(value: string, language: AppLanguage) {
   const parsed = parseLooseJson<Partial<OptimizedCvDraft>>(value, {});
   const hasStructuredCv =
     typeof parsed.summary === "string" ||
@@ -1900,38 +1863,46 @@ function normalizeCvTextForEditing(value: string) {
     Array.isArray(parsed.notes);
   if (!hasStructuredCv) return value;
 
+  const labels = getCvEditorLabels(language);
   const sections = [
-    parsed.summary ? `Özet\n${parsed.summary}` : "",
-    Array.isArray(parsed.skills) && parsed.skills.length ? `Yetenekler\n${parsed.skills.join(", ")}` : "",
+    parsed.summary ? `${labels.summary}\n${parsed.summary}` : "",
+    Array.isArray(parsed.skills) && parsed.skills.length ? `${labels.skills}\n${parsed.skills.join(", ")}` : "",
     Array.isArray(parsed.experience) && parsed.experience.length
-      ? `Deneyim\n${parsed.experience.map((item) => {
+      ? `${labels.experience}\n${parsed.experience.map((item) => {
           const role = [item.role, item.company, item.period].filter(Boolean).join(" | ");
           const bullets = Array.isArray(item.bullets) ? item.bullets.map((bullet) => `- ${bullet}`).join("\n") : "";
           return [role, bullets].filter(Boolean).join("\n");
         }).join("\n\n")}`
       : "",
-    Array.isArray(parsed.notes) && parsed.notes.length ? `Notlar\n${parsed.notes.map((note) => `- ${note}`).join("\n")}` : ""
+    Array.isArray(parsed.notes) && parsed.notes.length ? `${labels.notes}\n${parsed.notes.map((note) => `- ${note}`).join("\n")}` : ""
   ].filter(Boolean);
 
   return sections.join("\n\n");
 }
 
-function serializeCvForEditing(cv: Cv) {
+function serializeCvForEditing(cv: Cv, language: AppLanguage) {
+  const labels = getCvEditorLabels(language);
   const sections = [
-    cv.summary ? `Özet\n${cv.summary}` : "",
-    cv.skills.length ? `Yetenekler\n${cv.skills.join(", ")}` : "",
+    cv.summary ? `${labels.summary}\n${cv.summary}` : "",
+    cv.skills.length ? `${labels.skills}\n${cv.skills.join(", ")}` : "",
     cv.experience.length
-      ? `Deneyim\n${cv.experience.map((item) => {
+      ? `${labels.experience}\n${cv.experience.map((item) => {
           const role = [item.role, item.company, item.period].filter(Boolean).join(" | ");
           const bullets = item.bullets.map((bullet) => `- ${bullet}`).join("\n");
           return [role, bullets].filter(Boolean).join("\n");
         }).join("\n\n")}`
       : "",
     cv.education.length
-      ? `Eğitim\n${cv.education.map((item) => [item.degree, item.school, item.period].filter(Boolean).join(", ")).join("\n")}`
+      ? `${labels.education}\n${cv.education.map((item) => [item.degree, item.school, item.period].filter(Boolean).join(", ")).join("\n")}`
       : ""
   ].filter(Boolean);
   return sections.join("\n\n");
+}
+
+function getCvEditorLabels(language: AppLanguage) {
+  return language === "tr"
+    ? { summary: "Özet", skills: "Yetenekler", experience: "Deneyim", education: "Eğitim", notes: "Notlar" }
+    : { summary: "Summary", skills: "Skills", experience: "Experience", education: "Education", notes: "Notes" };
 }
 
 function extractJsonStringArray(value: string, key: string) {
@@ -2041,10 +2012,14 @@ function formatEducationDraft(education?: { degree?: string; school?: string; pe
 }
 
 function localizeCvName(name: string, language: AppLanguage) {
-  if (language !== "tr") return name;
-  if (name === "Primary CV" || name === "Ana CV") return "Ana Özgeçmiş";
-  if (name === "New CV" || name === "Yeni CV") return "Yeni Özgeçmiş";
-  return name.replace(/ Copy$/, " Kopya");
+  if (language === "tr") {
+    if (name === "Primary CV" || name === "Main CV" || name === "Ana CV") return "Ana Özgeçmiş";
+    if (name === "New CV" || name === "Yeni CV") return "Yeni Özgeçmiş";
+    return name.replace(/ Copy$/, " Kopya");
+  }
+  if (name === "Primary CV" || name === "Ana CV" || name === "Ana Özgeçmiş") return "Main CV";
+  if (name === "New CV" || name === "Yeni CV" || name === "Yeni Özgeçmiş") return "New CV";
+  return name.replace(/ Kopya$/, " Copy");
 }
 
 function ChoiceRail<T extends string>({
@@ -2664,20 +2639,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginTop: 12,
     marginBottom: 10
-  },
-  tonePreviewBox: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 4,
-    marginBottom: 8
-  },
-  tonePreviewText: {
-    color: colors.text,
-    fontSize: 14,
-    lineHeight: 20
   },
   builderGroup: {
     borderLeftWidth: 1,

@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="tr">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hirvia | Hukuk ve Yardım Merkezi</title>
+    <title>Hirvia | Legal and Help Center</title>
     <style>
       :root {
         color-scheme: light;
@@ -27,12 +27,36 @@
         margin: 0 auto;
         padding: 40px 20px 72px;
       }
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+      }
       .eyebrow {
         color: var(--accent);
         font-weight: 700;
         letter-spacing: 0.04em;
         text-transform: uppercase;
         font-size: 12px;
+      }
+      .lang {
+        display: flex;
+        gap: 8px;
+      }
+      .lang button {
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--muted);
+        border-radius: 999px;
+        padding: 8px 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .lang button.active {
+        color: var(--accent);
+        background: #eef2ff;
+        border-color: #c7d2fe;
       }
       h1 {
         margin: 8px 0 10px;
@@ -105,139 +129,196 @@
         padding: 2px 6px;
         border-radius: 6px;
       }
+      [data-lang-panel] { display: none; }
+      [data-lang-panel].active { display: block; }
     </style>
   </head>
   <body>
     <main class="wrap">
-      <div class="eyebrow">Hirvia</div>
-      <h1>Hukuk ve Yardım Merkezi</h1>
-      <p class="lead">
-        Hirvia; CV geliştirme, iş ilanı eşleştirme, ATS kontrolü ve mülakat hazırlığı sunan AI destekli bir iş başvurusu yardımcısıdır.
-        Bu sayfa gizlilik, kullanım koşulları, abonelikler ve veri paylaşımı ile ilgili temel bilgileri açıklar.
-      </p>
-      <p class="meta">Son güncelleme: 22 Nisan 2026</p>
-
-      <nav>
-        <a href="#privacy">Gizlilik</a>
-        <a href="#terms">Koşullar</a>
-        <a href="#help">Yardım</a>
-        <a href="#subscription">Abonelik</a>
-        <a href="#ai">AI Veri Paylaşımı</a>
-        <a href="#deletion">Veri Silme</a>
-      </nav>
-
-      <section id="privacy">
-        <h2>Gizlilik Politikası</h2>
-        <p>
-          Hirvia yerel öncelikli çalışır. Profil, CV taslakları, geçmiş, kredi bilgisi ve ayarlar önce cihazda tutulur.
-        </p>
-        <p>
-          Hirvia kullanıcıdan hesap oluşturmasını istemez ve Firebase ya da benzeri bulut veri tabanı kullanmaz.
-          Kullanıcı tarafından oluşturulan CV, profil ve geçmiş verileri cihazdaki yerel depolamada tutulur.
-        </p>
-        <p>
-          Kullanıcı AI veri paylaşım izni verirse, CV metni, profil özetleri, iş ilanı, mülakat notları ve ilgili bağlam
-          yalnızca işleme amacıyla güvenli backend üzerinden üçüncü taraf AI sağlayıcısına gönderilebilir.
-          Bu veri sadece özet, optimizasyon, ATS geri bildirimi ve mülakat hazırlığı üretmek için kullanılır.
-        </p>
-        <p>
-          Kullanıcı bu izni uygulama içindeki Ayarlar ekranından açıp kapatabilir. İzin kapalıyken uygulama açılmaya devam eder,
-          ancak AI özellikleri kullanılmaz.
-        </p>
-        <p>
-          Yedek dışarı aktarımları kullanıcı tarafından başlatılır. JSON, metin veya PDF dosyaları kullanıcının kendi cihazına indirilir
-          ya da cihazdaki paylaşım menüsü üzerinden seçilen hedefe aktarılır.
-        </p>
-      </section>
-
-      <section id="terms">
-        <h2>Kullanım Koşulları</h2>
-        <p>
-          Hirvia profesyonel ve gerçekçi iş başvurusu desteği sunar. Uygulama işe alımı garanti etmez, hukuki tavsiye vermez
-          ve profesyonel insan kaynakları kararının yerine geçmez.
-        </p>
-        <p>
-          Üretilen AI çıktıları kullanıcının sağladığı veri ve seçilen role göre yorumlayıcıdır. Kullanıcı son kararı kendi
-          koşulları ve sorumluluğu altında verir.
-        </p>
-        <p>
-          Yanıltıcı, uydurma veya başka kişileri aldatmaya yönelik kullanım desteklenmez.
-        </p>
-        <p>
-          Kullanıcı, CV ve başvuru metinlerinde doğru bilgi kullanmaktan sorumludur. Hirvia, AI tarafından üretilen metinleri
-          profesyonel bir taslak olarak sunar; son kontrol ve yayın sorumluluğu kullanıcıya aittir.
-        </p>
-      </section>
-
-      <section id="help">
-        <h2>Yardım Merkezi</h2>
-        <ul>
-          <li>Uygulama girişte hesap zorunluluğu olmadan açılır.</li>
-          <li>CV, geçmiş ve ayarlar cihazda tutulur.</li>
-          <li>Standart AI işlemleri kredi kullanır.</li>
-          <li>AI veri paylaşım izni kapalıysa AI aksiyonları durur.</li>
-          <li>Yedek alma ve yedekten geri yükleme Ayarlar içinden yapılabilir.</li>
-        </ul>
-      </section>
-
-      <section id="subscription">
-        <h2>Satın Alma ve Kredi Paketleri</h2>
-        <p>
-          Hirvia'nın mevcut uygulama içi satın alma sistemi AI işlemleri için tek seferlik kredi paketleri sunar.
-          Satın almalar Apple App Store ve Google Play Billing üzerinden yapılır. Ödeme, iptal ve geri ödeme
-          kuralları ilgili mağaza politikaları tarafından yönetilir.
-        </p>
-        <p>
-          Tek seferlik kredi paketleri kullanıcı hesabına değil, uygulamanın yerel kredi bakiyesine ek kullanım hakkı verir.
-          Mağaza satın alımlarını geri yükleme seçeneği uygulama içindeki Ayarlar ekranında bulunur.
-        </p>
-        <p>
-          Mevcut sürümde otomatik yenilenen abonelik ürünü uygulanmamıştır. Uygulamada aktif olan satın alma seçenekleri
-          25 kredi ve 100 kredi paketleridir.
-        </p>
-        <div class="grid">
-          <div class="mini">
-            <strong>25 Kredi Paketi</strong>
-            <p>Hafif CV optimizasyonu ve kısa başvuru hazırlığı için tek seferlik kredi paketi.</p>
-          </div>
-          <div class="mini">
-            <strong>100 Kredi Paketi</strong>
-            <p>Birden fazla iş ilanı için optimizasyon, ATS kontrolü ve mülakat hazırlığı kullanımı.</p>
-          </div>
+      <div class="topbar">
+        <div class="eyebrow">Hirvia</div>
+        <div class="lang" aria-label="Language">
+          <button type="button" data-lang-button="en" class="active">EN</button>
+          <button type="button" data-lang-button="tr">TR</button>
         </div>
-        <p>
-          Mevcut ürün kimlikleri:
-          <code>credits_25</code>,
-          <code>credits_100</code>
-        </p>
-      </section>
+      </div>
 
-      <section id="ai">
-        <h2>AI Veri Paylaşım İzni</h2>
-        <p>
-          AI veri paylaşım izni, Hirvia'nın kullanıcının sağladığı içeriği AI özelliklerini çalıştırmak için işlemesine izin verir.
-          Bu izin varsayılan olarak kullanıcıya açıkça sorulur ve Ayarlar ekranından değiştirilebilir.
+      <div data-lang-panel="en" class="active">
+        <h1>Legal and Help Center</h1>
+        <p class="lead">
+          Hirvia is an AI-powered job application assistant for CV improvement, job matching, ATS checks, and interview preparation.
+          This page explains privacy, terms, credit packages, AI data sharing, and local data controls.
         </p>
-        <ul>
-          <li>Paylaşılabilecek veriler: CV metni, profil bilgileri, iş ilanı, mülakat notları ve ilgili uygulama bağlamı.</li>
-          <li>Amaç: profil özeti, madde yeniden yazımı, iş ilanı analizi, CV optimizasyonu, ATS kontrolü ve mülakat hazırlığı.</li>
-          <li>İzin kapalıysa: uygulama temel yerel işlevleriyle açılır, ancak AI aksiyonları çalışmaz.</li>
-          <li>API anahtarları mobil uygulamada tutulmaz; AI çağrıları backend üzerinden yapılır.</li>
-        </ul>
-      </section>
+        <p class="meta">Last updated: April 24, 2026</p>
 
-      <section id="deletion">
-        <h2>Veri Silme ve Sıfırlama</h2>
-        <p>
-          Ayarlar ekranından tüm yerel veriler sıfırlanabilir. Bu işlem profil, CV taslakları, geçmiş, kredi kayıtları ve ayarları kaldırır.
+        <nav>
+          <a href="#privacy">Privacy</a>
+          <a href="#terms">Terms</a>
+          <a href="#help">Help</a>
+          <a href="#subscription">Credits</a>
+          <a href="#ai">AI Data Sharing</a>
+          <a href="#deletion">Data Deletion</a>
+        </nav>
+
+        <section id="privacy">
+          <h2>Privacy Policy</h2>
+          <p>Hirvia is local-first. Profile data, CV drafts, history, credit information, and settings are stored on the user's device first.</p>
+          <p>Hirvia does not require account creation and does not use Firebase or a similar cloud database for user CV data.</p>
+          <p>If the user allows AI data sharing, CV text, profile summaries, job descriptions, interview notes, and relevant context may be sent through a secure backend to the selected third-party AI provider only for processing.</p>
+          <p>The user can enable or disable this permission from the app settings. When permission is disabled, the app can still open, but AI actions are not used.</p>
+          <p>JSON, text, and PDF exports are started by the user and are downloaded or shared through the user's device.</p>
+        </section>
+
+        <section id="terms">
+          <h2>Terms of Use</h2>
+          <p>Hirvia provides practical support for professional job applications. It does not guarantee employment, provide legal advice, or replace human hiring decisions.</p>
+          <p>AI outputs are drafts based on the data provided by the user and the selected target role. The user remains responsible for reviewing and using the final content.</p>
+          <p>Misleading, fabricated, or deceptive use is not supported. Users are responsible for keeping CV and application content truthful.</p>
+        </section>
+
+        <section id="help">
+          <h2>Help Center</h2>
+          <ul>
+            <li>The app opens without requiring an account.</li>
+            <li>CVs, history, and settings are stored locally on the device.</li>
+            <li>Standard AI actions use credits.</li>
+            <li>If AI data sharing is off, AI actions stop.</li>
+            <li>Backup export and backup import are available in Settings.</li>
+          </ul>
+        </section>
+
+        <section id="subscription">
+          <h2>Purchases and Credit Packages</h2>
+          <p>Hirvia currently offers one-time credit packages for AI actions through Apple App Store and Google Play Billing. Payment, cancellation, and refund rules are managed by the relevant store policies.</p>
+          <p>Current one-time products are 25 credits and 100 credits. The current version does not include an auto-renewing subscription product.</p>
+          <div class="grid">
+            <div class="mini">
+              <strong>25 Credit Package</strong>
+              <p>A light package for quick CV optimization and short application preparation.</p>
+            </div>
+            <div class="mini">
+              <strong>100 Credit Package</strong>
+              <p>A larger package for multiple job descriptions, ATS checks, and interview preparation.</p>
+            </div>
+          </div>
+          <p>Current product IDs: <code>credits_25</code>, <code>credits_100</code></p>
+        </section>
+
+        <section id="ai">
+          <h2>AI Data Sharing Permission</h2>
+          <p>AI data sharing lets Hirvia process user-provided content for AI features. This permission is requested clearly in the app and can be changed in Settings.</p>
+          <ul>
+            <li>Possible shared data: CV text, profile information, job descriptions, interview notes, and relevant app context.</li>
+            <li>Purpose: profile summaries, bullet rewriting, job analysis, CV optimization, ATS feedback, and interview preparation.</li>
+            <li>If permission is off, local app features remain available but AI actions do not run.</li>
+            <li>API keys are not stored in the mobile app; AI calls go through the backend.</li>
+          </ul>
+        </section>
+
+        <section id="deletion">
+          <h2>Data Deletion and Reset</h2>
+          <p>All local data can be reset from Settings. This removes profile data, CV drafts, history, credit records, and settings from the device.</p>
+          <p>The user can also export a JSON backup and import it later on the same or another device.</p>
+          <p>Store transaction records may be retained by Apple or Google according to their platform policies.</p>
+        </section>
+      </div>
+
+      <div data-lang-panel="tr">
+        <h1>Hukuk ve Yardım Merkezi</h1>
+        <p class="lead">
+          Hirvia; özgeçmiş geliştirme, iş ilanı eşleştirme, ATS kontrolü ve mülakat hazırlığı sunan AI destekli bir iş başvurusu yardımcısıdır.
+          Bu sayfa gizlilik, kullanım koşulları, kredi paketleri, AI veri paylaşımı ve yerel veri kontrollerini açıklar.
         </p>
-        <p>
-          Kullanıcı ayrıca JSON yedek dışarı aktarımı alabilir ve daha sonra bu yedeği aynı cihazda veya başka bir cihazda içe aktarabilir.
-        </p>
-        <p>
-          Yasal veya mali yükümlülük gerektiren mağaza işlem kayıtları ilgili platform kurallarına göre sınırlı sürelerle saklanabilir.
-        </p>
-      </section>
+        <p class="meta">Son güncelleme: 24 Nisan 2026</p>
+
+        <nav>
+          <a href="#privacy-tr">Gizlilik</a>
+          <a href="#terms-tr">Koşullar</a>
+          <a href="#help-tr">Yardım</a>
+          <a href="#subscription-tr">Krediler</a>
+          <a href="#ai-tr">AI Veri Paylaşımı</a>
+          <a href="#deletion-tr">Veri Silme</a>
+        </nav>
+
+        <section id="privacy-tr">
+          <h2>Gizlilik Politikası</h2>
+          <p>Hirvia yerel öncelikli çalışır. Profil, özgeçmiş taslakları, geçmiş, kredi bilgisi ve ayarlar önce cihazda tutulur.</p>
+          <p>Hirvia kullanıcıdan hesap oluşturmasını istemez ve kullanıcı özgeçmiş verileri için Firebase ya da benzeri bir bulut veri tabanı kullanmaz.</p>
+          <p>Kullanıcı AI veri paylaşım izni verirse, özgeçmiş metni, profil özetleri, iş ilanı, mülakat notları ve ilgili bağlam yalnızca işleme amacıyla güvenli backend üzerinden seçilen üçüncü taraf AI sağlayıcısına gönderilebilir.</p>
+          <p>Kullanıcı bu izni uygulama içindeki Ayarlar ekranından açıp kapatabilir. İzin kapalıyken uygulama açılır, ancak AI aksiyonları kullanılmaz.</p>
+          <p>JSON, metin ve PDF dışa aktarımları kullanıcı tarafından başlatılır ve kullanıcının cihazına indirilir ya da cihaz paylaşım menüsüyle aktarılır.</p>
+        </section>
+
+        <section id="terms-tr">
+          <h2>Kullanım Koşulları</h2>
+          <p>Hirvia profesyonel iş başvuruları için pratik destek sunar. İşe alımı garanti etmez, hukuki tavsiye vermez ve insan kaynakları kararlarının yerine geçmez.</p>
+          <p>AI çıktıları kullanıcının sağladığı veri ve seçilen hedef role göre hazırlanmış taslaklardır. Son kontrol ve kullanım sorumluluğu kullanıcıya aittir.</p>
+          <p>Yanıltıcı, uydurma veya aldatıcı kullanım desteklenmez. Kullanıcı özgeçmiş ve başvuru içeriğinde doğru bilgi kullanmaktan sorumludur.</p>
+        </section>
+
+        <section id="help-tr">
+          <h2>Yardım Merkezi</h2>
+          <ul>
+            <li>Uygulama hesap zorunluluğu olmadan açılır.</li>
+            <li>Özgeçmişler, geçmiş ve ayarlar cihazda tutulur.</li>
+            <li>Standart AI işlemleri kredi kullanır.</li>
+            <li>AI veri paylaşım izni kapalıysa AI aksiyonları durur.</li>
+            <li>Yedek dışa aktarma ve yedekten içe aktarma Ayarlar ekranında bulunur.</li>
+          </ul>
+        </section>
+
+        <section id="subscription-tr">
+          <h2>Satın Alma ve Kredi Paketleri</h2>
+          <p>Hirvia mevcut sürümde Apple App Store ve Google Play Billing üzerinden AI işlemleri için tek seferlik kredi paketleri sunar. Ödeme, iptal ve geri ödeme kuralları ilgili mağaza politikaları tarafından yönetilir.</p>
+          <p>Mevcut tek seferlik ürünler 25 kredi ve 100 kredi paketleridir. Bu sürümde otomatik yenilenen abonelik ürünü yoktur.</p>
+          <div class="grid">
+            <div class="mini">
+              <strong>25 Kredi Paketi</strong>
+              <p>Hızlı özgeçmiş optimizasyonu ve kısa başvuru hazırlığı için hafif paket.</p>
+            </div>
+            <div class="mini">
+              <strong>100 Kredi Paketi</strong>
+              <p>Birden fazla iş ilanı, ATS kontrolü ve mülakat hazırlığı için daha geniş paket.</p>
+            </div>
+          </div>
+          <p>Mevcut ürün kimlikleri: <code>credits_25</code>, <code>credits_100</code></p>
+        </section>
+
+        <section id="ai-tr">
+          <h2>AI Veri Paylaşım İzni</h2>
+          <p>AI veri paylaşım izni, Hirvia'nın kullanıcı tarafından sağlanan içeriği AI özelliklerini çalıştırmak için işlemesine izin verir. Bu izin uygulamada açıkça sorulur ve Ayarlar ekranından değiştirilebilir.</p>
+          <ul>
+            <li>Paylaşılabilecek veriler: özgeçmiş metni, profil bilgileri, iş ilanı, mülakat notları ve ilgili uygulama bağlamı.</li>
+            <li>Amaç: profil özeti, madde yeniden yazımı, iş ilanı analizi, özgeçmiş optimizasyonu, ATS kontrolü ve mülakat hazırlığı.</li>
+            <li>İzin kapalıysa yerel uygulama özellikleri kullanılabilir, ancak AI aksiyonları çalışmaz.</li>
+            <li>API anahtarları mobil uygulamada tutulmaz; AI çağrıları backend üzerinden yapılır.</li>
+          </ul>
+        </section>
+
+        <section id="deletion-tr">
+          <h2>Veri Silme ve Sıfırlama</h2>
+          <p>Ayarlar ekranından tüm yerel veriler sıfırlanabilir. Bu işlem profil, özgeçmiş taslakları, geçmiş, kredi kayıtları ve ayarları cihazdan kaldırır.</p>
+          <p>Kullanıcı ayrıca JSON yedek dışa aktarımı alabilir ve bu yedeği aynı cihazda veya başka bir cihazda içe aktarabilir.</p>
+          <p>Mağaza işlem kayıtları Apple veya Google tarafından kendi platform politikalarına göre saklanabilir.</p>
+        </section>
+      </div>
     </main>
+    <script>
+      const buttons = document.querySelectorAll("[data-lang-button]");
+      const panels = document.querySelectorAll("[data-lang-panel]");
+
+      function setLanguage(language) {
+        document.documentElement.lang = language;
+        document.title = language === "tr" ? "Hirvia | Hukuk ve Yardım Merkezi" : "Hirvia | Legal and Help Center";
+        buttons.forEach((button) => button.classList.toggle("active", button.dataset.langButton === language));
+        panels.forEach((panel) => panel.classList.toggle("active", panel.dataset.langPanel === language));
+      }
+
+      buttons.forEach((button) => {
+        button.addEventListener("click", () => setLanguage(button.dataset.langButton));
+      });
+
+      setLanguage("en");
+    </script>
   </body>
 </html>

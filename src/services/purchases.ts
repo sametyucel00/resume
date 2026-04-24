@@ -15,6 +15,42 @@ const productCredits: Record<ProductId, number> = {
   credits_100: 100
 };
 
+type IapPurchase = {
+  productId?: string;
+  transactionId?: string;
+  purchaseToken?: string;
+};
+
+function isProductId(value: string | undefined): value is ProductId {
+  return value === "credits_25" || value === "credits_100";
+}
+
+function getPurchaseMessage(language: "tr" | "en", credits: number) {
+  return language === "tr" ? `${credits} kredi hesabına eklendi.` : `${credits} credits added to your balance.`;
+}
+
+function getStoreUnavailableMessage(language: "tr" | "en") {
+  return language === "tr"
+    ? "Kredi paketleri şu anda App Store tarafından kullanılamıyor. Lütfen daha sonra tekrar deneyin."
+    : "Credit packs are currently unavailable from the App Store. Please try again later.";
+}
+
+function getPurchaseErrorMessage(language: "tr" | "en", error: unknown) {
+  const code = typeof error === "object" && error && "code" in error ? String((error as { code?: unknown }).code ?? "") : "";
+  if (code === "E_USER_CANCELLED" || code === "USER_CANCELLED") {
+    return language === "tr" ? "Satın alma iptal edildi." : "Purchase was cancelled.";
+  }
+  return language === "tr"
+    ? "Satın alma tamamlanamadı. Lütfen App Store hesabınızı ve bağlantınızı kontrol edip tekrar deneyin."
+    : "Purchase could not be completed. Check your App Store account and connection, then try again.";
+}
+
+async function finishIfNeeded(iap: any, purchase: IapPurchase | IapPurchase[] | undefined, isConsumable = true) {
+  const firstPurchase = Array.isArray(purchase) ? purchase[0] : purchase;
+  if (!firstPurchase || typeof iap.finishTransaction !== "function") return;
+  await iap.finishTransaction({ purchase: firstPurchase, isConsumable });
+}
+
 export async function purchaseCredits(productId: ProductId) {
   const language = useAppStore.getState().settings.language;
   const credits = productCredits[productId];
@@ -33,20 +69,38 @@ export async function purchaseCredits(productId: ProductId) {
   try {
     const iap = require("react-native-iap");
     await iap.initConnection();
-    await iap.requestPurchase({ sku: productId });
+
+    if (Platform.OS === "ios" && typeof iap.clearTransactionIOS === "function") {
+      await iap.clearTransactionIOS();
+    }
+
+    const products = await iap.getProducts({ skus: productIds });
+    const product = Array.isArray(products) ? products.find((item) => item.productId === productId) : undefined;
+    if (!product) {
+      return {
+        ok: false,
+        credits: 0,
+        message: getStoreUnavailableMessage(language)
+      };
+    }
+
+    const purchase = await iap.requestPurchase(
+      Platform.OS === "ios"
+        ? { sku: productId, andDangerouslyFinishTransactionAutomaticallyIOS: false }
+        : { skus: [productId] }
+    );
+    await finishIfNeeded(iap, purchase, true);
+
     return {
       ok: true,
       credits,
-      message: language === "tr" ? `${credits} kredi hesabına eklendi.` : `${credits} credits added to your balance.`
+      message: getPurchaseMessage(language, credits)
     };
-  } catch {
+  } catch (error) {
     return {
       ok: false,
       credits: 0,
-      message:
-        language === "tr"
-          ? "Satın alma tamamlanamadı. Lütfen mağaza hesabınızı ve bağlantınızı kontrol edip tekrar deneyin."
-          : "Purchase could not be completed. Check your store account and connection, then try again."
+      message: getPurchaseErrorMessage(language, error)
     };
   }
 }
@@ -65,8 +119,8 @@ export async function restorePurchases() {
     const iap = require("react-native-iap");
     await iap.initConnection();
     const purchases = await iap.getAvailablePurchases();
-    const credits = purchases.reduce((total: number, item: { productId?: ProductId }) => {
-      if (!item.productId) return total;
+    const credits = purchases.reduce((total: number, item: { productId?: string }) => {
+      if (!isProductId(item.productId)) return total;
       return total + (productCredits[item.productId] ?? 0);
     }, 0);
     return {
